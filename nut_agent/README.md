@@ -1,6 +1,6 @@
 # AI Nutritionist Agent
 
-A sophisticated nutritionist agent built with LangGraph and Streamlit that leverages Google Gemini LLM for primary analysis and optionally uses trained machine learning models for validation and double-checking.
+A sophisticated nutritionist agent built with LangGraph and Streamlit that leverages Google Gemini LLM for primary analysis and, if available, uses trained machine learning models for validation and double-checking. Includes secure user registration, session management, and advanced personalization features.
 
 ## Features
 
@@ -8,11 +8,12 @@ A sophisticated nutritionist agent built with LangGraph and Streamlit that lever
 - **State Management**: Maintains conversation context and user profile
 - **Intelligent Routing**: Adaptive conversation flow based on user state and intent
 - **Google Gemini Integration**: Primary analysis powered by advanced LLM
-- **Optional ML Validation**: Uses trained models to double-check and validate LLM outputs
+- **Automatic ML Validation**: Uses trained models to double-check and validate LLM outputs if models are present (no toggle)
 
 ### 🍽️ Optional ML-Powered Validation
 - **Recipe Difficulty Prediction**: Validates difficulty classification (Easy, More effort, A challenge)
 - **Meal Type Classification**: Validates meal categorization (breakfast, lunch, dinner, snack, dessert)
+- **Total Time Classification**: Validates total cooking time class (e.g., under 30 min, 30-60 min, over 60 min)
 
 ### 🎯 Personalized Recommendations
 - **BMR/TDEE Calculations**: Science-based calorie target calculations using Mifflin-St Jeor equation
@@ -24,12 +25,16 @@ A sophisticated nutritionist agent built with LangGraph and Streamlit that lever
 - **Interactive Chat**: Natural conversation with the AI nutritionist
 - **Visual Dashboard**: Charts and metrics for nutrition tracking
 - **Meal Planning**: Generate and modify daily meal plans
-- **Recipe Analyzer**: Analyze individual recipes with ML validation (difficulty & meal type only)
-- **ML Toggle**: Enable/disable ML validation as needed
+- **Recipe Analyzer**: Analyze individual recipes with ML validation (difficulty, meal type & total time class)
+- **Registration & Login**: Secure onboarding, persistent user profiles, and chat history
+- **Session Management**: Multiple chat sessions per user, with memory/context selection for continuity
+- **Standalone Recipe Analyzer**: Analyze any recipe with ML/LLM in a dedicated tool
+- **Daily Results Tracker**: Log and analyze daily progress and meal compliance
+- **Memory Selection**: Use previous chat sessions as context for continuity and personalization
 
 ## Architecture Philosophy
 
-### Primary LLM Analysis + Optional ML Validation
+### Primary LLM Analysis + Automatic ML Validation
 
 The agent uses a **two-layer approach**:
 
@@ -38,12 +43,12 @@ The agent uses a **two-layer approach**:
    - Generates meal plans, provides nutrition advice
    - Analyzes recipes with contextual understanding
 
-2. **Validation Layer (ML Models - Optional)**:
+2. **Validation Layer (ML Models - Automatic)**:
    - Provides additional validation for recipe analysis
-   - Double-checks difficulty and meal type predictions
-   - Can be enabled/disabled based on preference
+   - Double-checks difficulty, meal type, and total time class predictions
+   - ML validation is always performed if models are present; if not, the agent relies on LLM analysis only.
 
-This approach ensures the agent works smoothly even without ML models while providing enhanced validation for difficulty and meal type when available.
+There is no toggle to enable/disable ML validation—if models are available, validation is automatic. The agent works smoothly even without ML models.
 
 ## Installation
 
@@ -70,17 +75,16 @@ This approach ensures the agent works smoothly even without ML models while prov
 streamlit run streamlit_app.py
 ```
 
-The app includes:
-- 🤖 **ML Validation Toggle**: Enable/disable ML model validation
+
+#### Streamlit App Features
 - 💬 **Chat Interface**: Natural conversation with the AI nutritionist
 - 🍽️ **Meal Planning**: Complete daily meal plan generation
 - 📊 **Dashboard**: Nutrition tracking and visualization
+- 📝 **Registration & Login**: Secure onboarding, persistent user profiles, and chat history
+- 🧠 **Session Memory**: Select previous chat sessions as context for continuity
+- 🍳 **Standalone Recipe Analyzer**: Analyze any recipe with ML/LLM in a dedicated tool
+- 📈 **Daily Results Tracker**: Log and analyze daily progress and meal compliance
 
-### Running the Demo
-
-```bash
-python demo.py
-```
 
 ### Using the Agent Programmatically
 
@@ -132,13 +136,14 @@ class NutritionistState(TypedDict):
 4. **Recipe Analysis**: Analyze recipes with optional ML validation
 5. **General Chat**: Handle questions and provide nutrition advice
 
-### Optional ML Integration
-The agent can optionally use your existing ML models for validation:
+### ML Integration
+The agent will automatically use your existing ML models for validation if they are present:
 - **Difficulty Model**: Validates cooking difficulty predictions
 - **Meal Type Model**: Validates meal category classifications
+- **Total Time Model**: Validates total cooking time class (e.g., under 30 min, 30-60 min, over 60 min)
 
 ### Tool Functions
-- `validate_recipe_with_ml_models()`: ML validation of recipes (difficulty & meal type only)
+- `validate_recipe_with_ml_models()`: ML validation of recipes (difficulty, meal type & total time class)
 - `calculate_personalized_nutrition_targets()`: Calculates BMR/TDEE and targets
 - `generate_smart_meal_suggestions()`: Creates meal recommendations
 
@@ -154,12 +159,15 @@ If ML validation is enabled, the agent looks for models in:
 │   └── mlp_classifier.pt
 ├── meal_train/
 │   └── [similar structure]
+├── total_time_class_train/
+│   └── lightgbm_classifier.pt
 ```
 
 ### Supported Model Types
 - XGBoost (`.pt` files)
 - LightGBM (`.pt` files)
 - PyTorch MLP (`.pt` files)
+- (All model types above are supported for difficulty, meal type, and total time classification)
 
 ## Example Workflows
 
@@ -178,7 +186,7 @@ Agent: Generates meal plan → Distributes calories → Suggests specific recipe
 ### 3. Recipe Analysis with ML Validation
 ```
 User: "How difficult is grilled salmon with quinoa?"
-Agent: LLM analyzes recipe → ML validation (difficulty & meal type) → Combined response
+Agent: LLM analyzes recipe → ML validation (difficulty, meal type & total time class) → Combined response
 ```
 
 ### 4. Meal Plan Generation
@@ -189,17 +197,18 @@ Agent: Calculates targets → Generates breakfast/lunch/dinner/snacks → Provid
 
 ## ML Validation Features
 
-When enabled, ML validation provides:
+When ML models are present, validation provides:
 
 - **Confidence Scores**: ML model confidence levels for predictions
 - **Comparison**: Side-by-side comparison with LLM analysis
-- **Consistency Check**: Verification of difficulty and meal type classifications
+- **Consistency Check**: Verification of difficulty, meal type, and total time classifications
 
 Example ML validation output:
 ```
 🤖 ML Validation Results (for double-checking):
 - Difficulty: Easy (confidence: 85%)
 - Meal Type: dinner (confidence: 92%)
+- Total Time Class: under 30 min (confidence: 88%)
 ```
 
 ## Customization
@@ -216,15 +225,15 @@ def your_custom_tool(param: str) -> Dict[str, Any]:
 tools = [validate_recipe_with_ml_models, calculate_personalized_nutrition_targets, your_custom_tool]
 ```
 
-### Disabling ML Validation
-In Streamlit: Uncheck the "🤖 Enable ML Validation" toggle
-In code: Set `ml_validation_enabled = False`
 
-### Customizing Nutrition Calculations
-Modify constants in `config.py`:
-- `BMR_CONSTANTS`: Basal metabolic rate calculation parameters
-- `ACTIVITY_MULTIPLIERS`: Activity level multipliers
-- `MACRO_RATIOS`: Macronutrient distribution ratios
+### Customizing Nutrition Calculations and Extending the Agent
+- **Nutrition Science**: Modify constants in `config.py`:
+   - `BMR_CONSTANTS`: Basal metabolic rate calculation parameters
+   - `ACTIVITY_MULTIPLIERS`: Activity level multipliers
+   - `MACRO_RATIOS`: Macronutrient distribution ratios
+- **Add New Tools**: Use the `@tool` decorator in `improved_agent.py` and add to the tool list.
+- **Add/Change Models**: Update model paths and registry in `config.py` and `model_predictor.py`.
+- **UI Customization**: Add new features or tabs in `streamlit_app.py`.
 
 ## Troubleshooting
 
@@ -237,9 +246,32 @@ The agent works perfectly without ML models - it will simply skip validation and
 - Ensure stable internet connectivity
 
 ### Performance
-- Enable ML validation only when needed for better performance
 - ML models require moderate RAM (500MB-2GB depending on model size)
 - Consider model quantization for production deployment
+
+## User Registration, Login, and Session Management
+
+- **Registration & Login**: Users create accounts with username and password (passwords are securely hashed).
+- **Profile Data**: Registration collects age, weight, height, gender, activity level, goals, dietary preferences, cooking experience, budget, meal schedule, health conditions, and more.
+- **Session Management**: Each user can have multiple chat sessions, with the ability to select previous sessions as memory/context for new chats.
+- **Chat History**: All chat history and user data are stored securely in the `secrets/` directory (excluded from version control).
+- **Export/Import**: Users can export their conversation history as JSON.
+- **Security**: All sensitive data is stored in `secrets/`, and passwords are hashed.
+
+## Streamlit App Advanced Features
+
+- **Standalone Recipe Analyzer**: Analyze any recipe with ML/LLM in a dedicated tool, with detailed breakdown and confidence scores.
+- **Daily Results Tracker**: Log daily weight, meal compliance, and additional notes; receive AI analysis and recommendations.
+- **Memory Selection**: Select previous chat sessions to use as context for continuity and personalization.
+- **Quick Actions**: One-click buttons for meal plan generation, nutrition target calculation, and more.
+- **Debug & Export**: View session/debug info and export conversation data.
+
+## Security and Data Handling
+
+- All user data and chat logs are stored in the `secrets/` directory and are excluded from version control for privacy.
+- Passwords are securely hashed.
+- Users can export their conversation history as JSON.
+- Registration and chat data are never shared or uploaded.
 
 ## Future Enhancements
 
@@ -250,22 +282,8 @@ The agent works perfectly without ML models - it will simply skip validation and
 - **Social Features**: Share meal plans and get community feedback
 - **Advanced Analytics**: Detailed nutrition insights with ML trends
 
-### ML Improvements
-- **Ensemble Validation**: Combine multiple model predictions
-- **Ingredient-Level Analysis**: More granular recipe understanding
-- **Cuisine-Specific Models**: Better cultural food understanding
-- **Personalized Models**: Adapt to individual user preferences over time
-
-## Contributing
-
-To contribute to this project:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Submit a pull request
-
-## License
-
-This project is part of the larger food prediction system. Please refer to the main project license.
+### ML Improvements (Planned)
+- **Ensemble Validation**: Combine multiple model predictions (future)
+- **Ingredient-Level Analysis**: More granular recipe understanding (future)
+- **Cuisine-Specific Models**: Better cultural food understanding (future)
+- **Personalized Models**: Adapt to individual user preferences over time (future)

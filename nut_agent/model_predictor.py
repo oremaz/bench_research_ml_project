@@ -12,8 +12,7 @@ from food_preds.utils.utils import load_model
 from food_preds.pipelines_torch.models import MODEL_REGISTRY
 import json
 
-
-sys.path.append(str(Path(__file__).parent.parent))
+sys.path.append(str(Path(__file__).parent))
 
 
 class FoodModelPredictor:
@@ -46,9 +45,11 @@ class FoodModelPredictor:
         # Initialize model containers
         self.difficulty_model = None
         self.meal_type_model = None
+        self.time_class_model = None
         self.difficulty_pipeline = None
         self.meal_type_pipeline = None
-        
+        self.time_class_pipeline = None
+            
         # Load models
         self._load_models()
         
@@ -66,8 +67,40 @@ class FoodModelPredictor:
             meal_path = str(self.models_path / 'meal_train')
             self.meal_type_model = load_model(MODEL_REGISTRY['lightgbm_classifier'], 'lightgbm_classifier', {}, path_start=meal_path)
             self.meal_type_pipeline = GeneralPipelineSklearn(model=self.meal_type_model, task_type='classification')
+
+            # Load time classification model
+            timec_path = str(self.models_path / 'total_time_class_train')
+            self.time_class_model = load_model(MODEL_REGISTRY['lightgbm_classifier'], 'lightgbm_classifier', {}, path_start=timec_path)
+            self.time_class_pipeline = GeneralPipelineSklearn(model=self.time_class_model, task_type='classification')
         except Exception as e:
             print(f"Error loading models: {e}")
+    def predict_time_class_from_embedding(self, embedding: list) -> dict:
+        """
+        Predict total time class from text embedding using LightGBM pipeline.
+        """
+        if self.time_class_pipeline is None:
+            return {"prediction": "Unknown", "confidence": 0.0, "error": "Model not loaded"}
+        try:
+            embedding_array = np.array(embedding).reshape(1, -1)
+            probabilities = self.time_class_pipeline.model.predict_proba(embedding_array)
+            predicted_class = int(np.argmax(probabilities[0]))
+            confidence = float(probabilities[0][predicted_class])
+            # Map class index to label
+            class_labels = ['<15 min', '15-30 min', '30-60 min', '>60 min']
+            # If more than 4 classes, fallback to string index
+            if predicted_class < len(class_labels):
+                label = class_labels[predicted_class]
+            else:
+                label = str(predicted_class)
+            all_probs = {class_labels[i] if i < len(class_labels) else str(i): float(prob) for i, prob in enumerate(probabilities[0])}
+            return {
+                "prediction": label,
+                "confidence": confidence,
+                "class_index": predicted_class,
+                "all_probabilities": all_probs
+            }
+        except Exception as e:
+            return {"prediction": "Unknown", "confidence": 0.0, "error": str(e)}
 
     def enhance_recipe_description(self, user_description: str) -> Dict[str, Union[str, List[str]]]:
         """
@@ -344,11 +377,13 @@ class FoodModelPredictor:
             class_embedding = self.get_text_embedding(formatted_text, "classification")
             difficulty_result = self.predict_difficulty_from_embedding(class_embedding)
             meal_type_result = self.predict_meal_type_from_embedding(class_embedding)
+            time_class_result = self.predict_time_class_from_embedding(class_embedding)
             analysis = {
                 "original_description": recipe_description,
                 "enhanced_recipe": enhanced_recipe,
                 "difficulty": difficulty_result,
-                "meal_type": meal_type_result
+                "meal_type": meal_type_result,
+                "time_class": time_class_result
             }
             return analysis
         except Exception as e:

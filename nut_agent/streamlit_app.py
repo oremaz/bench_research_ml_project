@@ -581,7 +581,7 @@ def display_recipe_analyzer():
                         # ML Predictions
                         st.markdown("### 🤖 ML Model Predictions")
                         
-                        col1, col2 = st.columns(2)
+                        col1, col2, col3 = st.columns(3)
                         with col1:
                             # Difficulty Analysis
                             difficulty = analysis.get('difficulty', {})
@@ -600,7 +600,15 @@ def display_recipe_analyzer():
                                     st.write(f"{label.title()}: {prob:.1%}")
                             else:
                                 st.write(f"{meal_type.get('prediction', 'Unknown')}: {meal_type.get('confidence', 0):.1%}")
-                        # ...removed total time display...
+                        with col3:
+                            # Time Class Analysis
+                            time_class = analysis.get('time_class', {})
+                            st.markdown("#### ⏱️ Time Class")
+                            if 'all_probabilities' in time_class:
+                                for label, prob in time_class['all_probabilities'].items():
+                                    st.write(f"{label}: {prob:.1%}")
+                            else:
+                                st.write(f"{time_class.get('prediction', 'Unknown')}: {time_class.get('confidence', 0):.1%}")
                         
                     except Exception as e:
                         st.error(f"Error during recipe analysis: {str(e)}")
@@ -911,25 +919,41 @@ def main_app():
         st.markdown("---")
         st.subheader("⚙️ Settings")
         
-        if st.button("🗑️ Clear Current Chat"):
-            # Clear only current session memory, keep chat session ID
-            st.session_state['conversation_state'] = {
-                "messages": [],
-                "user_profile": {},
-                "weight_goal": {},
-                "daily_constraints": {},
-                "previous_results": {},
-                "meal_plan": {},
-                "nutritional_values": {},
-                "profile_setup_complete": False
-            }
-            st.session_state['chat_history'] = []
-            
-            # Re-inject user profile for this session
-            inject_user_profile_to_agent()
-            
-            st.success(f"💫 Current chat cleared! (Session: {st.session_state.get('chat_session_id', 'unknown')})")
-            st.rerun()
+
+        if 'clear_chat_confirm' not in st.session_state:
+            st.session_state['clear_chat_confirm'] = False
+
+        if st.button("🗑️ Clear Current Chat", help="This will permanently delete the current chat session and its history from disk. This action cannot be undone."):
+            st.session_state['clear_chat_confirm'] = True
+
+        if st.session_state.get('clear_chat_confirm', False):
+            st.warning("Are you sure you want to permanently delete this chat session and all its history? This cannot be undone.")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Yes, delete this chat session", key="confirm_delete_chat"):
+                    username = st.session_state.get('username')
+                    session_id = st.session_state.get('chat_session_id')
+                    if username and session_id:
+                        clear_conversation_history(username, session_id)
+                    st.session_state['conversation_state'] = {
+                        "messages": [],
+                        "user_profile": {},
+                        "weight_goal": {},
+                        "daily_constraints": {},
+                        "previous_results": {},
+                        "meal_plan": {},
+                        "nutritional_values": {},
+                        "profile_setup_complete": False
+                    }
+                    st.session_state['chat_history'] = []
+                    inject_user_profile_to_agent()
+                    st.session_state['clear_chat_confirm'] = False
+                    st.success(f"💫 Current chat deleted and cleared! (Session: {session_id})")
+                    st.rerun()
+            with col2:
+                if st.button("Cancel", key="cancel_delete_chat"):
+                    st.session_state['clear_chat_confirm'] = False
+                    st.info("Chat deletion cancelled.")
             
         if st.button("🆕 New Conversation"):
             # Save current conversation to disk first

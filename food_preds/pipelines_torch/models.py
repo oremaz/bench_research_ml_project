@@ -35,6 +35,54 @@ class TorchMLPRegressor(TorchMLP):
     def __init__(self, input_dim: int, output_dim: int = 1, hidden_dims: list = [256, 128, 64], dropout: float = 0.3, batchnorm: bool = False):
         super().__init__(input_dim, hidden_dims, output_dim, dropout, batchnorm)
 
+
+# --- Residual MLP ---
+class ResidualBlock(nn.Module):
+    def __init__(self, dim: int, dropout: float = 0.3):
+        super().__init__()
+        self.fc1 = nn.Linear(dim, dim)
+        self.fc2 = nn.Linear(dim, dim)
+        self.dropout = nn.Dropout(dropout)
+        self.bn1 = nn.BatchNorm1d(dim)
+        self.bn2 = nn.BatchNorm1d(dim)
+
+    def forward(self, x):
+        identity = x
+        out = self.fc1(x)
+        out = self.bn1(out)
+        out = torch.relu(out)
+        out = self.dropout(out)
+        out = self.fc2(out)
+        out = self.bn2(out)
+        out += identity
+        out = torch.relu(out)
+        return out
+
+
+class ResidualMLP(nn.Module):
+    """Simple residual MLP with a stack of residual blocks."""
+
+    def __init__(self, input_dim: int, hidden_dim: int = 256, num_blocks: int = 3, output_dim: int = 1, dropout: float = 0.3):
+        super().__init__()
+        self.input = nn.Linear(input_dim, hidden_dim)
+        self.blocks = nn.Sequential(*[ResidualBlock(hidden_dim, dropout) for _ in range(num_blocks)])
+        self.output = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x):
+        x = torch.relu(self.input(x))
+        x = self.blocks(x)
+        return self.output(x)
+
+
+class ResidualMLPClassifier(ResidualMLP):
+    def __init__(self, input_dim: int, num_classes: int = 2, hidden_dim: int = 256, num_blocks: int = 3, dropout: float = 0.3):
+        super().__init__(input_dim, hidden_dim, num_blocks, num_classes, dropout)
+
+
+class ResidualMLPRegressor(ResidualMLP):
+    def __init__(self, input_dim: int, output_dim: int = 1, hidden_dim: int = 256, num_blocks: int = 3, dropout: float = 0.3):
+        super().__init__(input_dim, hidden_dim, num_blocks, output_dim, dropout)
+
 # --- RandomForest Wrapper ---
 class SklearnRandomForestClassifierWrapper:
     """
@@ -697,6 +745,7 @@ class HuggingFaceQLoRAWrapper:
 CLASSIFICATION_MODEL_REGISTRY: Dict[str, Callable] = {
     "mlp_classifier": TorchMLPClassifier,
     "deep_mlp_classifier": lambda input_dim, num_classes=2: TorchMLPClassifier(input_dim, [512, 256, 128, 64], num_classes=num_classes, dropout=0.3, batchnorm=True),
+    "residual_mlp_classifier": ResidualMLPClassifier,
     "random_forest_classifier": SklearnRandomForestClassifierWrapper,
     "xgboost_classifier": XGBoostClassifierWrapper,
     "lightgbm_classifier": LightGBMClassifierWrapper,
@@ -708,6 +757,7 @@ CLASSIFICATION_MODEL_REGISTRY: Dict[str, Callable] = {
 REGRESSION_MODEL_REGISTRY: Dict[str, Callable] = {
     "mlp_regressor": TorchMLPRegressor,
     "deep_mlp_regressor": lambda input_dim, output_dim: TorchMLPRegressor(input_dim, output_dim, [512, 256, 128, 64], dropout=0.3, batchnorm=True),
+    "residual_mlp_regressor": ResidualMLPRegressor,
     "random_forest_regressor": SklearnRandomForestRegressorWrapper,
     "xgboost_regressor": XGBoostRegressorWrapper,
     "lightgbm_regressor": LightGBMRegressorWrapper,
@@ -727,11 +777,13 @@ MODEL_REGISTRY: Dict[str, Callable] = {
 
 """
 CLASSIFICATION_MODEL_REGISTRY keys:
-- 'mlp_classifier', 'deep_mlp_classifier', 'random_forest_classifier', 'xgboost_classifier'
+- 'mlp_classifier', 'deep_mlp_classifier', 'residual_mlp_classifier',
+  'random_forest_classifier', 'xgboost_classifier'
 - 'hf_lora_classifier', 'hf_qlora_classifier', 'llama_cpp_classifier'
 
 REGRESSION_MODEL_REGISTRY keys:
-- 'mlp_regressor', 'deep_mlp_regressor', 'random_forest_regressor', 'xgboost_regressor'
+- 'mlp_regressor', 'deep_mlp_regressor', 'residual_mlp_regressor',
+  'random_forest_regressor', 'xgboost_regressor'
 - 'hf_lora_regressor', 'hf_qlora_regressor', 'llama_cpp_regressor'
 
 MODEL_REGISTRY keys (combined for backward compatibility):

@@ -5,7 +5,7 @@ import numpy as np
 from imblearn.over_sampling import (
     SMOTE, BorderlineSMOTE, SVMSMOTE, KMeansSMOTE, ADASYN
 )
-from imblearn.under_sampling import TomekLinks
+from imblearn.under_sampling import TomekLinks, RandomUnderSampler, NearMiss
 from imblearn.combine import SMOTEENN, SMOTETomek
 
 # --- Custom Augmentations ---
@@ -78,6 +78,89 @@ def _calculate_sampling_strategy(y: np.ndarray, max_factor: float = 2.0) -> Dict
             sampling_strategy[class_label] = target_samples
     
     return sampling_strategy
+
+def random_under_augmentation(
+    X: np.ndarray,
+    y: np.ndarray,
+    random_state: Optional[int] = 42,
+    max_factor: float = 2.0,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Randomly undersample majority classes based on ``max_factor``.
+
+    The ``max_factor`` parameter follows the same definition as in the
+    oversampling methods: ``majority_count / final_minority_count``.  When
+    ``max_factor`` equals ``1.0`` the classes are perfectly balanced; higher
+    values keep a portion of the majority class.
+    """
+    if max_factor == 1.0:
+        sampling_strategy = 'auto'
+    else:
+        sampling_strategy = _calculate_sampling_strategy(y, max_factor)
+        # RandomUnderSampler expects desired majority counts, so invert
+        # the mapping produced by ``_calculate_sampling_strategy``
+        from collections import Counter
+        class_counts = Counter(y)
+        for cls in class_counts:
+            if cls not in sampling_strategy:
+                target = int(max(class_counts.values()) / max_factor)
+                sampling_strategy[cls] = max(target, sampling_strategy.get(cls, target))
+
+    sampler = RandomUnderSampler(random_state=random_state, sampling_strategy=sampling_strategy)
+    return sampler.fit_resample(X, y)
+
+
+def nearmiss_augmentation(
+    X: np.ndarray,
+    y: np.ndarray,
+    random_state: Optional[int] = 42,
+    max_factor: float = 2.0,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Under-sample using the NearMiss strategy.
+
+    NearMiss selects majority samples closest to minority ones.  We mirror the
+    ``max_factor`` logic used for oversampling to control the final ratio.
+    """
+    if max_factor == 1.0:
+        sampling_strategy = 'auto'
+    else:
+        sampling_strategy = _calculate_sampling_strategy(y, max_factor)
+        from collections import Counter
+        class_counts = Counter(y)
+        for cls in class_counts:
+            if cls not in sampling_strategy:
+                target = int(max(class_counts.values()) / max_factor)
+                sampling_strategy[cls] = max(target, sampling_strategy.get(cls, target))
+
+    sampler = NearMiss(version=1, sampling_strategy=sampling_strategy)
+    return sampler.fit_resample(X, y)
+
+
+def mgs_grf_augmentation(
+    X: np.ndarray,
+    y: np.ndarray,
+    categorical_features: Optional[np.ndarray] = None,
+    random_state: int = 42,
+    max_factor: float = 2.0,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Wrapper around `MGSGRFOverSampler` for mixed feature oversampling.
+
+    This augmentation leverages the `mgs-grf` library which blends Gaussian
+    resampling for continuous features with generative rules for categorical
+    ones.  It gracefully degrades when the package is unavailable.
+    """
+    try:
+        from mgs_grf import MGSGRFOverSampler
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise ImportError(
+            "mgs_grf library is required for mgs_grf_augmentation."
+        ) from exc
+
+    sampler = MGSGRFOverSampler(
+        categorical_features=categorical_features,
+        random_state=random_state,
+        ratio=max_factor,
+    )
+    return sampler.fit_resample(X, y)
 
 def smote_augmentation(X: np.ndarray, y: np.ndarray, random_state: Optional[int] = 42, max_factor: float = 2.0) -> Tuple[np.ndarray, np.ndarray]:
     if max_factor == 1.0:
@@ -183,28 +266,41 @@ AUGMENTATION_REGISTRY: Dict[str, Callable] = {
     # Hybrid samplers (already include cleaning)
     "smoteenn": smoteenn_augmentation,
     "smotetomek": smotetomek_augmentation,
+    # Pure undersampling methods
+    "random_under": random_under_augmentation,
+    "nearmiss": nearmiss_augmentation,
+    # Mixed-type oversampler from MGS-GRF
+    "mgs_grf": mgs_grf_augmentation,
 }
 
 # --- Documentation ---
 """
-AUGMENTATION_REGISTRY keys:
-- 'smote', 'borderline_smote', 'svm_smote', 'kmeans_smote', 'adasyn', 'random_oversampler', 'smoteenn', 'smotetomek', 'mixup', 'mixup_smote', 'smote_gaussian', 'none'
+AUGMENTATION_REGISTRY keys (selection):
+- 'smote', 'borderline_smote', 'svm_smote', 'kmeans_smote', 'adasyn'
+- 'mixup', 'mixup_smote', 'smoteenn', 'smotetomek'
+- Undersampling: 'random_under', 'nearmiss'
+- Mixed-type oversampling: 'mgs_grf'
+- 'none'
+
+Notes:
 - All SMOTE variants and hybrid samplers are for classification only.
 - Mixup and none can be used for regression or classification.
-- All oversampling methods (except mixup and none) automatically apply TomekLinks cleaning after generation.
+- MGS-GRF supports continuous and categorical features.
+- All oversampling methods (except mixup and none) automatically apply TomekLinks
+  cleaning after generation.
 
 AUTOMATIC CLEANING:
-- TomekLinks cleaning is automatically applied after all oversampling operations
+- TomekLinks cleaning is automatically applied after oversampling operations
 - This removes borderline samples and improves sample quality
 - No need for manual composition - cleaning is built-in
 
 max_factor parameter:
-- Most augmentation functions now accept a 'max_factor' parameter (default=2.0)
+- Most augmentation functions accept a 'max_factor' parameter (default=2.0)
 - max_factor = majority_count / final_minority_count
-- max_factor=1.0: Complete balancing (minority class becomes equal to majority class)
-- max_factor=2.0: Minority class reaches 50% of majority class size 
-- max_factor=4.0: Minority class reaches 25% of majority class size
-- Supported by: smote, borderline_smote, svm_smote, kmeans_smote, adasyn, 
-  smoteenn, smotetomek, mixup_smote
+- max_factor=1.0: Complete balancing (minority class equals majority)
+- max_factor=2.0: Minority reaches 50% of majority size
+- max_factor=4.0: Minority reaches 25% of majority size
+- Supported by: smote, borderline_smote, svm_smote, kmeans_smote, adasyn,
+  smoteenn, smotetomek, mixup_smote, random_under, nearmiss, mgs_grf
 - Not applicable to: mixup, none
 """

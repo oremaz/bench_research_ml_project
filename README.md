@@ -1,17 +1,20 @@
 # Food ML Project
 
-This repository is a modular, extensible platform for food-related machine learning and AI research. It brings together advanced data augmentation, unified model pipelines, benchmarking, and a conversational nutritionist agent with a modern UI.
+This repository is a modular, extensible platform for food-related machine learning and AI research. It brings together advanced data augmentation, unified model pipelines, benchmarking, third-party research integrations, and a conversational nutritionist agent with a modern UI.
 
 ## Project Structure
 
 - **ml_pipeline/**: Core ML experimentation suite (augmentation, pipelines, benchmarking, reproducibility, results)
+- **third_party/**: Optional git submodules + lightweight loader utilities for official research repositories (FatFormer, DiffusionFake, TabR, GRANDE, TabM, MGS-GRF, TabEBM, ...)
 - **nut_agent/**: Streamlit-based conversational nutritionist agent (LLM + ML validation, user registration, session management)
 
 ## Getting Started
 
 - See `ml_pipeline/README.md` for details on data augmentation, model training, benchmarking, and reproducibility.
-- See `ml_pipeline/pipelines_torch/README.md` for pipeline and model registry usage.
+- See `ml_pipeline/pipelines_torch/README.md` for advanced pipeline usage, semi-supervised utilities, and official research wrappers.
 - See `nut_agent/README.md` for the conversational agent, Streamlit UI, and user management features.
+
+> ℹ️ **Working with official research code** — clone or update the submodules under `third_party/` and follow the per-directory README guidance for configuring environment variables before running benchmarks or SSL experiments.
 
 ## Quickstart
 

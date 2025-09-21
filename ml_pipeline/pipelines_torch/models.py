@@ -1,10 +1,31 @@
+import importlib
+from types import ModuleType
+from typing import Dict, Callable, Any, Optional
+
 import torch
 import torch.nn as nn
-from typing import Dict, Callable, Any, Optional
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 import xgboost as xgb
 import lightgbm as lgb
 from sklearn.multioutput import MultiOutputRegressor
+
+
+def _optional_import_module(candidates):
+    for name in candidates:
+        if not name:
+            continue
+        try:
+            return importlib.import_module(name)
+        except ImportError:
+            continue
+    return None
+
+
+def _resolve_attr(module: ModuleType, attr_chain: str):
+    target = module
+    for part in attr_chain.split("."):
+        target = getattr(target, part)
+    return target
 
 # --- MLPs ---
 class TorchMLP(nn.Module):
@@ -670,28 +691,189 @@ class HuggingFaceQLoRAWrapper:
                 probabilities.append(probs)
                 
         return probabilities
-        
+
     def __call__(self, X):
         """Returns raw logits."""
         import torch
         self.model.eval()
-        
+
         with torch.no_grad():
             if isinstance(X, list):
                 # Handle batch
                 all_logits = []
                 for text in X:
-                    inputs = self.tokenizer(text, return_tensors='pt', truncation=True, 
+                    inputs = self.tokenizer(text, return_tensors='pt', truncation=True,
                                           padding='max_length', max_length=256).to(self.device)
                     outputs = self.model(**inputs)
                     all_logits.append(outputs.logits)
                 return torch.cat(all_logits, dim=0)
             else:
                 # Single input
-                inputs = self.tokenizer(X, return_tensors='pt', truncation=True, 
+                inputs = self.tokenizer(X, return_tensors='pt', truncation=True,
                                       padding='max_length', max_length=256).to(self.device)
                 outputs = self.model(**inputs)
                 return outputs.logits
+
+
+class TabRClassifier(nn.Module):
+    """Wrapper around the official TabR implementation (Yandex Research, ICLR 2024)."""
+
+    def __init__(
+        self,
+        input_dim: int,
+        num_classes: int,
+        module_candidates: Optional[list[str]] = None,
+        builder_path: Optional[str] = None,
+        builder_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__()
+        module = _optional_import_module(module_candidates or [
+            "tabr",
+            "tabular_dl_tabr",
+            "tabular_dl_tabr.tabr",
+        ])
+        if module is None:
+            raise ImportError(
+                "TabR repository not found. Install it via `pip install git+https://github.com/yandex-research/tabular-dl-tabr` "
+                "or add the cloned repo to PYTHONPATH."
+            )
+
+        candidate_paths = [builder_path] if builder_path else [
+            "models.tab_r.TabRModel",
+            "TabRModel",
+            "model.TabR",
+        ]
+        builder = None
+        for path in candidate_paths:
+            if not path:
+                continue
+            try:
+                builder = _resolve_attr(module, path)
+                break
+            except AttributeError:
+                continue
+        if builder is None:
+            raise AttributeError("Unable to locate TabR model constructor inside the installed package.")
+
+        kwargs = dict(builder_kwargs or {})
+        kwargs.setdefault("d_in", input_dim)
+        kwargs.setdefault("num_classes", num_classes)
+        try:
+            self.model = builder(**kwargs)
+        except TypeError as exc:
+            raise TypeError(
+                "Failed to instantiate TabR. Pass the correct keyword arguments via `builder_kwargs` to match the upstream "
+                "constructor signature."
+            ) from exc
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # pragma: no cover - delegation
+        return self.model(x)
+
+
+class GRANDEClassifier(nn.Module):
+    """Wrapper for the official GRANDE implementation (ICLR 2024)."""
+
+    def __init__(
+        self,
+        input_dim: int,
+        num_classes: int,
+        module_candidates: Optional[list[str]] = None,
+        builder_path: Optional[str] = None,
+        builder_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__()
+        module = _optional_import_module(module_candidates or [
+            "grande",
+            "GRANDE",
+            "grande.model",
+        ])
+        if module is None:
+            raise ImportError(
+                "GRANDE repository not found. Install it via `pip install git+https://github.com/s-marton/GRANDE` or add the "
+                "cloned repo to PYTHONPATH."
+            )
+
+        candidate_paths = [builder_path] if builder_path else [
+            "models.grande.GRANDE",
+            "GRANDE",
+        ]
+        builder = None
+        for path in candidate_paths:
+            if not path:
+                continue
+            try:
+                builder = _resolve_attr(module, path)
+                break
+            except AttributeError:
+                continue
+        if builder is None:
+            raise AttributeError("Unable to locate GRANDE constructor inside the installed package.")
+
+        kwargs = dict(builder_kwargs or {})
+        kwargs.setdefault("input_dim", input_dim)
+        kwargs.setdefault("num_classes", num_classes)
+        try:
+            self.model = builder(**kwargs)
+        except TypeError as exc:
+            raise TypeError(
+                "Failed to instantiate GRANDE. Provide the expected keyword arguments via `builder_kwargs`."
+            ) from exc
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # pragma: no cover
+        return self.model(x)
+
+
+class TabMClassifier(nn.Module):
+    """Wrapper for the official TabM implementation (ICLR 2025)."""
+
+    def __init__(
+        self,
+        input_dim: int,
+        num_classes: int,
+        module_candidates: Optional[list[str]] = None,
+        builder_path: Optional[str] = None,
+        builder_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__()
+        module = _optional_import_module(module_candidates or [
+            "tabm",
+            "TabM",
+            "tabm.model",
+        ])
+        if module is None:
+            raise ImportError(
+                "TabM repository not found. Install it via `pip install git+https://github.com/yandex-research/tabm` or add the "
+                "cloned repo to PYTHONPATH."
+            )
+
+        candidate_paths = [builder_path] if builder_path else [
+            "model.TabM",
+            "TabM",
+        ]
+        builder = None
+        for path in candidate_paths:
+            if not path:
+                continue
+            try:
+                builder = _resolve_attr(module, path)
+                break
+            except AttributeError:
+                continue
+        if builder is None:
+            raise AttributeError("Unable to locate TabM constructor inside the installed package.")
+
+        kwargs = dict(builder_kwargs or {})
+        kwargs.setdefault("input_dim", input_dim)
+        kwargs.setdefault("num_classes", num_classes)
+        try:
+            self.model = builder(**kwargs)
+        except TypeError as exc:
+            raise TypeError(
+                "Failed to instantiate TabM. Provide the expected keyword arguments via `builder_kwargs`."
+            ) from exc
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # pragma: no cover
+        return self.model(x)
 
 # --- Registry ---
 CLASSIFICATION_MODEL_REGISTRY: Dict[str, Callable] = {
@@ -703,6 +885,9 @@ CLASSIFICATION_MODEL_REGISTRY: Dict[str, Callable] = {
     "hf_lora_classifier": lambda **kwargs: HuggingFaceLoRAWrapper(task_type='classification', **kwargs),
     "hf_qlora_classifier": lambda **kwargs: HuggingFaceQLoRAWrapper(task_type='classification', **kwargs),
     "llama_cpp_classifier": lambda **kwargs: LlamaCppClassifier(task_type='classification', **kwargs),
+    "tabr_classifier": lambda input_dim, num_classes=2, **kwargs: TabRClassifier(input_dim=input_dim, num_classes=num_classes, **kwargs),
+    "grande_classifier": lambda input_dim, num_classes=2, **kwargs: GRANDEClassifier(input_dim=input_dim, num_classes=num_classes, **kwargs),
+    "tabm_classifier": lambda input_dim, num_classes=2, **kwargs: TabMClassifier(input_dim=input_dim, num_classes=num_classes, **kwargs),
 }
 
 REGRESSION_MODEL_REGISTRY: Dict[str, Callable] = {

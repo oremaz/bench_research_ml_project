@@ -1,6 +1,11 @@
+import importlib
+import warnings
+from pathlib import Path
+from types import ModuleType
+from typing import Dict, Iterable, Optional, Type
+
 import torch
 import torch.nn as nn
-from typing import Dict, Type
 
 
 class SimpleCNN(nn.Module):
@@ -251,6 +256,199 @@ class Qwen2VLQLoRA(nn.Module):
         return output.logits[:, -1, : self.num_classes]
 
 
+def _import_optional_module(candidates: Iterable[str]) -> Optional[ModuleType]:
+    """Try to import the first available module from *candidates*.
+
+    Parameters
+    ----------
+    candidates:
+        Potential fully-qualified module names.
+
+    Returns
+    -------
+    ModuleType or ``None``
+        The imported module, or ``None`` if none of the candidates could be
+        imported. No exception is raised so that callers can provide helpful
+        installation hints.
+    """
+
+    for name in candidates:
+        if not name:
+            continue
+        try:
+            return importlib.import_module(name)
+        except ImportError:
+            continue
+    return None
+
+
+def _load_attr(module: ModuleType, attr_candidates: Iterable[str]):
+    for attr in attr_candidates:
+        if not attr:
+            continue
+        target = module
+        try:
+            for part in attr.split("."):
+                target = getattr(target, part)
+        except AttributeError:
+            continue
+        return target
+    raise AttributeError(f"None of {list(attr_candidates)} found in module {module.__name__}.")
+
+
+class FatFormerWrapper(nn.Module):
+    """Adapter around the official `Michel-liu/FatFormer` implementation.
+
+    The wrapper dynamically imports the GitHub repository (either installed via
+    ``pip install git+https://github.com/Michel-liu/FatFormer`` or added to the
+    ``PYTHONPATH``) and instantiates the :class:`FatFormer` model exposed there.
+
+    Parameters
+    ----------
+    num_classes:
+        Number of target classes for the downstream benchmark.
+    init_kwargs:
+        Optional keyword arguments forwarded to the constructor provided by the
+        official repository. Different checkpoints/configurations may require
+        specific arguments. When left ``None`` the wrapper only attempts to set
+        ``num_classes``.
+    checkpoint_path:
+        Optional path to a checkpoint produced by the official training code.
+        If supplied the weights are loaded with ``strict=False`` to remain
+        robust against minor key mismatches.
+    module_candidates / class_candidates:
+        Advanced users can provide alternative import strings should the
+        repository structure change. By default we cover the most common
+        layouts used in the upstream project.
+    """
+
+    def __init__(
+        self,
+        num_classes: int = 2,
+        init_kwargs: Optional[dict] = None,
+        checkpoint_path: Optional[str] = None,
+        module_candidates: Optional[Iterable[str]] = None,
+        class_candidates: Optional[Iterable[str]] = None,
+    ) -> None:
+        super().__init__()
+        module = _import_optional_module(
+            module_candidates
+            or (
+                "FatFormer.models.fatformer",
+                "fatformer.models.fatformer",
+                "models.fatformer",
+            )
+        )
+        if module is None:
+            raise ImportError(
+                "FatFormer repository is not available. Install it with "
+                "`pip install git+https://github.com/Michel-liu/FatFormer` "
+                "or add the cloned repo to PYTHONPATH."
+            )
+
+        FatFormerCls = _load_attr(module, class_candidates or ("FatFormer", "FatFormerModel"))
+        init_kwargs = dict(init_kwargs or {})
+
+        if "num_classes" not in init_kwargs:
+            init_kwargs["num_classes"] = num_classes
+
+        try:
+            self.model = FatFormerCls(**init_kwargs)
+        except TypeError as exc:  # pragma: no cover - depends on upstream signature
+            raise TypeError(
+                "Unable to instantiate FatFormer with the provided arguments. "
+                "Check the upstream constructor signature and supply the "
+                "required values via `init_kwargs`."
+            ) from exc
+
+        if checkpoint_path:
+            ckpt = torch.load(Path(checkpoint_path), map_location="cpu")
+            state = ckpt.get("state_dict") if isinstance(ckpt, dict) else ckpt
+            missing, unexpected = self.model.load_state_dict(state, strict=False)
+            if missing or unexpected:
+                warnings.warn(
+                    "Loaded FatFormer checkpoint with mismatched keys: "
+                    f"missing={missing}, unexpected={unexpected}",
+                    RuntimeWarning,
+                )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.model(x)
+
+
+class DiffusionFakeWrapper(nn.Module):
+    """Adapter for the official `skJack/DiffusionFake` classifier implementation.
+
+    The upstream repository exposes several network architectures geared towards
+    diffusion-based forgery detection. The wrapper loads the default classifier
+    and forwards inputs to it. Users can customise the instantiated architecture
+    via ``builder`` and ``builder_kwargs`` should they rely on a specific
+    configuration file from the original code base.
+    """
+
+    def __init__(
+        self,
+        num_classes: int = 2,
+        builder: Optional[str] = None,
+        builder_kwargs: Optional[dict] = None,
+        module_candidates: Optional[Iterable[str]] = None,
+    ) -> None:
+        super().__init__()
+        module = _import_optional_module(
+            module_candidates
+            or (
+                "DiffusionFake.models.networks",
+                "diffusionfake.models.networks",
+                "models.networks",
+            )
+        )
+        if module is None:
+            raise ImportError(
+                "DiffusionFake repository is not available. Install it with "
+                "`pip install git+https://github.com/skJack/DiffusionFake` "
+                "or add the cloned repo to PYTHONPATH."
+            )
+
+        if builder is None:
+            # try the default classifier exposed in upstream repo
+            builder_candidates = (
+                "Classifier",
+                "DiffusionFakeClassifier",
+                "build_classifier",
+            )
+        else:
+            builder_candidates = (builder,)
+
+        target = None
+        for candidate in builder_candidates:
+            try:
+                target = _load_attr(module, (candidate,))
+                break
+            except AttributeError:
+                continue
+        if target is None:
+            raise AttributeError(
+                "Could not locate a classifier constructor inside the "
+                "DiffusionFake repository. Provide `builder` with the fully "
+                "qualified callable name from the upstream project."
+            )
+
+        builder_kwargs = dict(builder_kwargs or {})
+        if "num_classes" not in builder_kwargs:
+            builder_kwargs["num_classes"] = num_classes
+
+        try:
+            self.model = target(**builder_kwargs)
+        except TypeError as exc:  # pragma: no cover - depends on upstream signature
+            raise TypeError(
+                "Unable to instantiate the DiffusionFake classifier. "
+                "Supply the appropriate keyword arguments via `builder_kwargs`."
+            ) from exc
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.model(x)
+
+
 MODEL_REGISTRY: Dict[str, Type[nn.Module]] = {
     "simple_cnn": SimpleCNN,
     "adaptive_cnn": AdaptiveCNN,
@@ -258,6 +456,8 @@ MODEL_REGISTRY: Dict[str, Type[nn.Module]] = {
     "resnet50": ResNet50,
     "clip_classifier": CLIPClassifier,
     "qwen2_vl_qlora": Qwen2VLQLoRA,
+    "fatformer": FatFormerWrapper,
+    "diffusionfake": DiffusionFakeWrapper,
 }
 
 

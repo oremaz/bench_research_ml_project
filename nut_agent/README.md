@@ -14,6 +14,7 @@ A sophisticated nutritionist agent built with LangGraph and Streamlit that lever
 - **Recipe Difficulty Prediction**: Validates difficulty classification (Easy, More effort, A challenge)
 - **Meal Type Classification**: Validates meal categorization (breakfast, lunch, dinner, snack, dessert)
 - **Total Time Classification**: Validates total cooking time class (e.g., under 30 min, 30-60 min, over 60 min)
+- **Model Sources**: Pulls models from `ml_pipeline/pipelines_torch` so you can leverage the latest registry additions (including official research adapters) without changing the agent code
 
 ### 🎯 Personalized Recommendations
 - **BMR/TDEE Calculations**: Science-based calorie target calculations using Mifflin-St Jeor equation

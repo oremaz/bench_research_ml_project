@@ -17,6 +17,12 @@ This module provides a unified, extensible framework for training, evaluating, a
 - **Custom wrappers**: All models are wrapped for compatibility with the pipeline interface.
 - **Easy extensibility**: Add new models by registering in `MODEL_REGISTRY`.
 
+### 🧬 Semi-Supervised & Research Hooks
+- **Consistency regularization**: Mean Teacher, Pi-Model, Pseudo-Labeling, and STU-CSSIC-inspired wrappers for both tabular and vision models (`ss_models.py`, `ss_vision_models.py`).
+- **Official augmentation bridges**: `augmentations.py` wraps state-of-the-art research repos (MGS-GRF, TabEBM) via the shared `third_party/` loader.
+- **Research samplers**: Native implementations of Simplicial SMOTE and MEB-SMOTE exposed alongside the official wrappers for registry-style access.
+- **Path-agnostic imports**: `third_party/` utilities resolve cloned repositories via explicit paths or environment variables (no vendoring needed).
+
 ### 🔄 Cross-Validation & Ensembling
 - **K-fold CV**: Built-in support for k-fold cross-validation, with weight averaging for PyTorch models.
 - **Metrics tracking**: Track and aggregate metrics (F1, R², etc.) across folds.
@@ -33,9 +39,12 @@ This module provides a unified, extensible framework for training, evaluating, a
 ```
 pipelines_torch/
 ├── __init__.py
+├── augmentations.py  # Official research augmentation wrappers + advanced samplers
 ├── base.py           # GeneralPipeline, GeneralPipelineSklearn
 ├── benchmark.py      # BenchmarkRunner (grid search, result aggregation)
 ├── models.py         # Model registry and wrappers (tabular/text models)
+├── ss_models.py      # Semi-supervised utilities for tabular models
+├── ss_vision_models.py  # Semi-supervised utilities for vision backbones
 ├── vision_models.py  # Computer vision model registry (CNNs, ViTs, CLIP, multimodal)
 ```
 
@@ -144,6 +153,48 @@ runner = BenchmarkRunner(
 )
 results_df = runner.run(X, y)
 ```
+
+### 5. Semi-Supervised Training
+
+```python
+from pipelines_torch.ss_models import SemiSupervisedTabular
+from pipelines_torch.models import MODEL_REGISTRY
+
+base = MODEL_REGISTRY['mlp_classifier'](input_dim=128, num_classes=5)
+ssl_model = SemiSupervisedTabular(base, num_classes=5)
+
+for epoch in range(num_epochs):
+    loss, logs = ssl_model.step(batch_labeled, batch_unlabeled, epoch)
+    loss.backward()
+    optimizer.step()
+    optimizer.zero_grad()
+    ssl_model.post_step()
+```
+
+### 6. Research Augmentations
+
+```python
+from pipelines_torch.augmentations import MGS_GRF_Augmentor, TabEBMGenerator
+
+# Point the loader to official repos (environment variables or explicit paths)
+mgs = MGS_GRF_Augmentor()
+tabebm = TabEBMGenerator()
+
+mgs_X, mgs_y = mgs.fit_resample(X_train, y_train, target_class=1, n_samples=200)
+tabebm.fit(X_train, y_train)
+synthetic = tabebm.sample(256, conditioned_on=1)
+```
+
+### Linking Official Research Repositories
+
+The `third_party/` helpers automatically look for cloned research repos inside `third_party/`, an explicit path, or environment variables. For example:
+
+```bash
+export MGS_GRF_REPO=/path/to/mgs-grf
+export TABEBM_REPO=/path/to/TabEBM
+```
+
+All loaders accept optional keyword arguments (`repo_path`, `env_var`, `module_candidates`) if you need to override the defaults.
 
 ---
 

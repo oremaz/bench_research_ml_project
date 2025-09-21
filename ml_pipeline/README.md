@@ -14,6 +14,7 @@ Comprehensive machine learning experimentation and benchmarking suite for food-r
 
 ### 🔄 Advanced Data Augmentation
 - **Tabular augmentation**: SMOTE (all variants), Mixup, hybrid samplers, and cleaning (see `data_augmentation/augmentations.py`)
+- **Official research integrations**: Drop-in wrappers for MGS-GRF minority oversampling and TabEBM generative modeling (`pipelines_torch/augmentations.py` via `third_party/` loader)
 - **Text augmentation**: LLM-based (OpenAI, Gemini, HuggingFace) and classical (synonym, backtranslation, EDA) methods (`text_aug.py`)
 - **Image augmentation**: Classical (flip, rotate, noise) and Albumentations-based pipelines (`image_aug.py`)
 - **Registry pattern**: Easily add new augmentation methods; configure via registry and YAML/dict
@@ -22,6 +23,7 @@ Comprehensive machine learning experimentation and benchmarking suite for food-r
 ### 🏗️ Modular Model Pipelines
 - **PyTorch & sklearn pipelines**: Unified `GeneralPipeline` and `GeneralPipelineSklearn` for all model types
 - **Model registry**: Plug-and-play support for MLP, XGBoost, LightGBM, RandomForest, HuggingFace LoRA/QLoRA, Llama.cpp, and more (`models.py`)
+- **Semi-supervised wrappers**: Consistency regularization, Mean Teacher, pseudo-labeling, and contrastive vision SSL utilities (`pipelines_torch/ss_models.py`, `pipelines_torch/ss_vision_models.py`)
 - **K-fold CV & ensembling**: Built-in cross-validation, weight averaging, and metrics tracking
 - **Flexible metrics**: Custom and standard metrics for classification/regression
 - **Consistent epoch selection**: Centralized logic in `utils/utils.py` ensures perfect consistency between training weight selection and result reporting
@@ -32,6 +34,12 @@ Comprehensive machine learning experimentation and benchmarking suite for food-r
 - **Metrics**: Accuracy, F1, R², MSE, and more (`utils/metrics.py`)
 - **Visualization**: Training curves, confusion matrices, and result plots (`utils/visualization.py`)
 - **Model persistence**: Save/load models, HuggingFace Hub integration
+
+### 🧬 Semi-Supervised & Official Research Integrations
+- **Tabular SSL**: Mean Teacher, pseudo-labeling, and confidence-ramped consistency losses for any classifier (`ss_models.py`)
+- **Vision SSL**: Pseudo-label, Pi-Model, Mean Teacher, and STU-CSSIC style contrastive learning wrappers (`ss_vision_models.py`)
+- **Research augmentors**: Integrate state-of-the-art oversamplers/generators (MGS-GRF, TabEBM, Simplicial SMOTE, MEB-SMOTE) through `pipelines_torch/augmentations.py`
+- **External repo loader**: `third_party/` utilities auto-import official GitHub repos via path or environment variables—no vendoring required
 
 ---
 
@@ -47,13 +55,18 @@ ml_pipeline/
 │   ├── augmentations.py            # Tabular augmentation (SMOTE, Mixup, etc.)
 │   ├── image_aug.py                # Image augmentation (classical, Albumentations)
 │   ├── text_aug.py                 # Text augmentation (LLM, classical)
-├── pipelines_torch/                # Model pipelines and wrappers
+├── pipelines_torch/                # Model pipelines, registries, SSL, and research hooks
 │   ├── __init__.py
+│   ├── augmentations.py            # Official research augmentation wrappers (MGS-GRF, TabEBM, etc.)
 │   ├── base.py                     # GeneralPipeline, GeneralPipelineSklearn
 │   ├── benchmark.py                # BenchmarkRunner (grid search, result aggregation)
 │   ├── models.py                   # Model registry and wrappers
+│   ├── ss_models.py                # Semi-supervised tabular utilities
+│   ├── ss_vision_models.py         # Semi-supervised vision utilities
+│   ├── vision_models.py            # Vision/backbone registry
 ├── results/                        # Experiment results (CSV, per-task)
 │   ├── ...                         # Results for difficulty, meal type, nutrients, time, etc.
+├── third_party/                    # Loader utilities for external research repositories
 ├── utils/                          # Utilities for data, metrics, reproducibility
 │   ├── data.py
 │   ├── metrics.py
@@ -72,13 +85,15 @@ ml_pipeline/
 
 ### 2. Data Augmentation
 - Select augmentation via registry (see `AUGMENTATION_README.md`)
-- Tabular: SMOTE (regular, borderline, kmeans, SVM), Mixup, hybrid samplers, cleaning
+- Tabular: SMOTE (regular, borderline, kmeans, SVM), Mixup, hybrid samplers, cleaning, Simplicial SMOTE, MEB-SMOTE
+- Official research hooks: Call into MGS-GRF oversampling and TabEBM generation without copying their repos (requires pointing `third_party/` loader to the upstream code)
 - Text: LLM-based (OpenAI, Gemini, HuggingFace), classical (synonym, EDA, backtranslation)
 - Image: Classical and Albumentations pipelines
 - Configure augmentations via dict/YAML or registry name
 
 ### 3. Model Selection & Pipeline
 - Choose model from registry (`models.py`): MLP, XGBoost, LightGBM, RandomForest, HuggingFace LoRA/QLoRA, Llama.cpp, etc.
+- Wrap any classifier/regressor with semi-supervised helpers from `ss_models.py`/`ss_vision_models.py` when mixing labeled & unlabeled data
 - Use `GeneralPipeline` (PyTorch) or `GeneralPipelineSklearn` (sklearn) for unified training, CV, and evaluation
 - All pipelines support augmentations, metrics, k-fold CV, and model saving/loading
 
@@ -252,11 +267,22 @@ runner.run()
 ```
 
 ### Data Augmentation
-Use the scripts in `data_augmentation/` to augment your datasets. For example:
+Use the scripts in `data_augmentation/` or the research wrappers in `pipelines_torch/augmentations.py` to augment your datasets.
 
 ```python
 from data_augmentation.text_aug import augment_text
+from pipelines_torch.augmentations import MGS_GRF_Augmentor, SimplicialSMOTE
+
+# LLM- or classical-based text augmentation
 augmented_text = augment_text("Sample recipe description")
+
+# Official MGS-GRF oversampler (point THIRD_PARTY_ROOT/mgs-grf at the upstream repo)
+mgs = MGS_GRF_Augmentor()
+X_bal, y_bal = mgs.fit_resample(X, y, target_class=1, n_samples=200)
+
+# Native research-inspired sampler
+simplicial = SimplicialSMOTE()
+synthetic = simplicial.sample(X, y, target_class=1, n_samples=200)
 ```
 
 ### Utilities

@@ -6,11 +6,12 @@ This repository is a modular, extensible platform for food-related machine learn
 
 - **ml_pipeline/**: Core ML experimentation suite (augmentation, pipelines, benchmarking, reproducibility, results)
 - **nut_agent/**: Streamlit-based conversational nutritionist agent (LLM + ML validation, user registration, session management)
+- **third_party/**: Lightweight loader utilities that let you point at official research repositories (e.g., MGS-GRF, TabEBM) without vendoring their code
 
 ## Getting Started
 
 - See `ml_pipeline/README.md` for details on data augmentation, model training, benchmarking, and reproducibility.
-- See `ml_pipeline/pipelines_torch/README.md` for pipeline and model registry usage.
+- See `ml_pipeline/pipelines_torch/README.md` for pipeline, semi-supervised utilities, and registry usage (tabular, vision, and third-party research models).
 - See `nut_agent/README.md` for the conversational agent, Streamlit UI, and user management features.
 
 ## Quickstart
@@ -28,5 +29,6 @@ This repository is a modular, extensible platform for food-related machine learn
 - All user data and chat logs are stored in `nut_agent/secrets/` (excluded from version control)
 - ML models are stored in `ml_pipeline/results/`
 - Modular design: add new models, augmentations, or agent tools with minimal friction
+- Official research repos can be linked via environment variables (e.g., `MGS_GRF_REPO`, `TABEBM_REPO`) so `ml_pipeline` loads upstream implementations without vendoring
 
 For full details, consult the README in each subfolder.

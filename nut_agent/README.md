@@ -14,6 +14,7 @@ A sophisticated nutritionist agent built with LangGraph and Streamlit that lever
 - **Recipe Difficulty Prediction**: Validates difficulty classification (Easy, More effort, A challenge)
 - **Meal Type Classification**: Validates meal categorization (breakfast, lunch, dinner, snack, dessert)
 - **Total Time Classification**: Validates total cooking time class (e.g., under 30 min, 30-60 min, over 60 min)
+- **Research-grade models**: Plug in the latest `ml_pipeline` semi-supervised or official research models (MGS-GRF, TabEBM, etc.) without modifying the agent
 
 ### 🎯 Personalized Recommendations
 - **BMR/TDEE Calculations**: Science-based calorie target calculations using Mifflin-St Jeor equation
@@ -233,6 +234,7 @@ tools = [validate_recipe_with_ml_models, calculate_personalized_nutrition_target
    - `MACRO_RATIOS`: Macronutrient distribution ratios
 - **Add New Tools**: Use the `@tool` decorator in `improved_agent.py` and add to the tool list.
 - **Add/Change Models**: Update model paths and registry in `config.py` and `model_predictor.py`.
+- **Leverage research integrations**: Point environment variables (e.g., `MGS_GRF_REPO`, `TABEBM_REPO`) at official repos to use the newest `ml_pipeline` augmentors and semi-supervised models inside the agent.
 - **UI Customization**: Add new features or tabs in `streamlit_app.py`.
 
 ## Troubleshooting

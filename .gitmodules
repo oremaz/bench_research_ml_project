@@ -4,3 +4,9 @@
 [submodule "ml_pipeline/third_party/ml_pipeline/third_party/DiffusionFake"]
 	path = ml_pipeline/third_party/ml_pipeline/third_party/DiffusionFake
 	url = git@github.com:skJack/DiffusionFake.git
+[submodule "ml_pipeline/third_party/FatFormer"]
+	path = ml_pipeline/third_party/FatFormer
+	url = git@github.com:Michel-liu/FatFormer.git
+[submodule "ml_pipeline/third_party/DiffusionFake"]
+	path = ml_pipeline/third_party/DiffusionFake
+	url = git@github.com:skJack/DiffusionFake.git

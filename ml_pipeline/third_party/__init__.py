@@ -126,3 +126,8 @@ def load_function(
             f"Unable to locate function '{function_name}' inside repository '{repo_name}'."
         )
     return symbol
+
+if __name__ == "__main__":
+    # Example usage
+    FatFormer = load_class("FatFormer", "CLIPModel")
+    print(FatFormer)

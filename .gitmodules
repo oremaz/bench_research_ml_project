@@ -10,3 +10,12 @@
 [submodule "ml_pipeline/third_party/DiffusionFake"]
 	path = ml_pipeline/third_party/DiffusionFake
 	url = git@github.com:skJack/DiffusionFake.git
+[submodule "ml_pipeline/third_party/tabm"]
+	path = ml_pipeline/third_party/tabm
+	url = git@github.com:yandex-research/tabm.git
+[submodule "ml_pipeline/third_party/tabular-dl-tabr"]
+	path = ml_pipeline/third_party/tabular-dl-tabr
+	url = git@github.com:yandex-research/tabular-dl-tabr.git
+[submodule "ml_pipeline/third_party/grande"]
+	path = ml_pipeline/third_party/grande
+	url = git@github.com:s-marton/GRANDE.git

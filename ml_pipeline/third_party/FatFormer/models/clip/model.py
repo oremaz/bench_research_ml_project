@@ -246,7 +246,16 @@ class ForgeryAwareAdapterLayer(nn.Module):
         nq, bs, md = x.shape
         # freq details
         img_patchs = x[1:].transpose(0, 1).reshape(bs, int(math.sqrt(nq)), int(math.sqrt(nq)), md).permute(0, 3, 1, 2)
-        dwt_img_l, dwt_img_h = self.dwt_transform(img_patchs)
+        orig_dtype = img_patchs.dtype
+        device = img_patchs.device
+
+        # Wavelet kernels are stored as float32 buffers; keep the transforms in float32 to
+        # avoid dtype mismatches under mixed precision, then convert the result back.
+        self.dwt_transform = self.dwt_transform.to(device=device, dtype=torch.float32)
+        self.idwt_transform = self.idwt_transform.to(device=device, dtype=torch.float32)
+        img_patchs_fp32 = img_patchs.to(dtype=torch.float32)
+
+        dwt_img_l, dwt_img_h = self.dwt_transform(img_patchs_fp32)
         dwt_img = torch.cat([dwt_img_l[:, :, None], dwt_img_h[0]], dim=2) # torch.Size([3, 1024, 4, 8, 8])
         hh, ww = dwt_img.shape[-2:]
         dwt_img = dwt_img.flatten(-2)
@@ -254,6 +263,7 @@ class ForgeryAwareAdapterLayer(nn.Module):
         dwt_feature = self.forward_freq(dwt_img)
         dwt_feature = dwt_feature.reshape(bs, 4, hh, ww, md).permute(0, 4, 1, 2, 3)
         dwt_feature = self.idwt_transform((dwt_feature[:, :, 0], [dwt_feature[:, :, 1:]])).flatten(-2).permute(2, 0, 1)
+        dwt_feature = dwt_feature.to(dtype=orig_dtype)
         dwt_feature = torch.cat([torch.zeros_like(x[:1]), dwt_feature], dim=0)
 
         # img details
@@ -263,7 +273,8 @@ class ForgeryAwareAdapterLayer(nn.Module):
         up = self.second_conv_layer(down).permute(2, 0, 1)
         up = up * self.scale
 
-        output = up + dwt_feature * self.freq_scale
+        freq_scale = self.freq_scale.to(dtype=up.dtype, device=up.device)
+        output = up + dwt_feature * freq_scale
         return output
 
 class ResidualAttentionBlock(nn.Module):

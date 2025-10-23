@@ -1,4 +1,4 @@
-# ML Research & Benchmarking Platform
+# Modular ML Pipeline for Multi-Modal Classification (AI-Generated Content Detection)
 
 Modular platform for ML research across multiple domains: food prediction (recipe difficulty, meal type, nutrients, time) and AI-generated content detection (deepfakes, image authenticity). Integrates advanced augmentation, unified pipelines, automated benchmarking, third-party research code (FatFormer, DiffusionFake, TabR, GRANDE, TabM), and a conversational nutritionist agent.
 

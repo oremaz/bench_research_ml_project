@@ -1,35 +1,28 @@
-# Food ML Project
+# ML Research & Benchmarking Platform
 
-This repository is a modular, extensible platform for food-related machine learning and AI research. It brings together advanced data augmentation, unified model pipelines, benchmarking, third-party research integrations, and a conversational nutritionist agent with a modern UI.
+Modular platform for ML research across multiple domains: food prediction (recipe difficulty, meal type, nutrients, time) and AI-generated content detection (deepfakes, image authenticity). Integrates advanced augmentation, unified pipelines, automated benchmarking, third-party research code (FatFormer, DiffusionFake, TabR, GRANDE, TabM), and a conversational nutritionist agent.
 
 ## Project Structure
 
 - **ml_pipeline/**: Core ML experimentation suite (augmentation, pipelines, benchmarking, reproducibility, results)
-- **third_party/**: Optional git submodules + lightweight loader utilities for official research repositories (FatFormer, DiffusionFake, TabR, GRANDE, TabM, MGS-GRF, TabEBM, ...)
-- **nut_agent/**: Streamlit-based conversational nutritionist agent (LLM + ML validation, user registration, session management)
+- **nut_agent/**: Streamlit-based conversational nutritionist agent (LLM + ML validation, user management)
 
 ## Getting Started
 
-- See `ml_pipeline/README.md` for details on data augmentation, model training, benchmarking, and reproducibility.
-- See `ml_pipeline/pipelines_torch/README.md` for advanced pipeline usage, semi-supervised utilities, and official research wrappers.
-- See `nut_agent/README.md` for the conversational agent, Streamlit UI, and user management features.
-
-> ℹ️ **Working with official research code** — clone or update the submodules under `third_party/` and follow the per-directory README guidance for configuring environment variables before running benchmarks or SSL experiments.
+- See `ml_pipeline/README.md` for data augmentation, model training, benchmarking, and third-party integrations
+- See `ml_pipeline/pipelines_torch/README.md` for advanced pipeline usage and vision/tabular wrappers
+- See `nut_agent/README.md` for the conversational agent, Streamlit UI, and user management
 
 ## Quickstart
 
-1. Install dependencies (see setup instructions in each submodule)
-2. Train or load models in `ml_pipeline`
-3. Launch the nutritionist agent UI:
-   ```bash
-   cd nut_agent
-   streamlit run streamlit_app.py
-   ```
+1. Install dependencies: `pip install -r requirements.txt`
+2. Train models: `cd ml_pipeline && jupyter notebook benchmark_results.ipynb`
+3. Launch agent: `cd nut_agent && streamlit run streamlit_app.py`
 
 ## Notes
 
-- All user data and chat logs are stored in `nut_agent/secrets/` (excluded from version control)
-- ML models are stored in `ml_pipeline/results/`
-- Modular design: add new models, augmentations, or agent tools with minimal friction
+- User data and chat logs: `nut_agent/secrets/` (excluded from version control)
+- ML models and results: `ml_pipeline/results/`
+- Registry-based design for easy addition of models, augmentations, and metrics
 
 For full details, consult the README in each subfolder.

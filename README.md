@@ -4,14 +4,8 @@ Modular platform for ML research across multiple domains: food prediction (recip
 
 ## Project Structure
 
-- **ml_pipeline/**: Core ML experimentation suite (augmentation, pipelines, benchmarking, reproducibility, results)
-- **nut_agent/**: Streamlit-based conversational nutritionist agent (LLM + ML validation, user management)
-
-## Getting Started
-
-- See `ml_pipeline/README.md` for data augmentation, model training, benchmarking, and third-party integrations
-- See `ml_pipeline/pipelines_torch/README.md` for advanced pipeline usage and vision/tabular wrappers
-- See `nut_agent/README.md` for the conversational agent, Streamlit UI, and user management
+- **ml_pipeline/**: Core ML experimentation suite (augmentation, pipelines, benchmarking, reproducibility, results). See `ml_pipeline/README.md`
+- **nut_agent/**: Streamlit-based conversational nutritionist agent (LLM + ML validation, user management). See `nut_agent/README.md`
 
 ## Quickstart
 

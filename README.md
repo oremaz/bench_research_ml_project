@@ -10,8 +10,23 @@ Modular platform for ML research across multiple domains: food prediction (recip
 ## Quickstart
 
 1. Install dependencies: `pip install -r requirements.txt`
-2. Train models: `cd ml_pipeline && jupyter notebook benchmark_results.ipynb`
-3. Launch agent: `cd nut_agent && streamlit run streamlit_app.py`
+2. Interactive Benchmark UI: `cd ml_pipeline && streamlit run benchmark_app.py` (with OpenMP configured)
+3. Launch nutritionist agent: `cd nut_agent && streamlit run streamlit_app.py`
+
+## Benchmark App (Streamlit)
+
+Interactive UI for model benchmarking with registry-based configuration:
+- **Launch**: `cd ml_pipeline && streamlit run benchmark_app.py`
+- **Features**: Upload CSV datasets, select models/augmentations from registries, configure training parameters, visualize results
+- **Location**: `ml_pipeline/benchmark_app.py`
+
+**macOS Setup** (for XGBoost): Install OpenMP via MacPorts (`sudo port install libomp`) and set `DYLD_LIBRARY_PATH` permanently in your shell config.
+
+Example (bash):
+```
+echo 'export DYLD_LIBRARY_PATH="/opt/local/lib/libomp:$DYLD_LIBRARY_PATH"' >> ~/.bash_profile
+source ~/.bash_profile
+```
 
 ## Notes
 

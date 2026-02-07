@@ -66,11 +66,28 @@ def _list_result_dirs(base_dir: str) -> list:
     return sorted([p for p in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, p))])
 
 
+def _load_index(path_start: str) -> Dict[str, dict]:
+    base_dir = os.path.join(RESULTS_DIR_OUT, path_start)
+    index_path = os.path.join(base_dir, "index.jsonl")
+    if not os.path.exists(index_path):
+        return {}
+    entries = {}
+    with open(index_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            entry = json.loads(line)
+            entries[entry["checkpoint_id"]] = entry
+    return entries
+
+
 def _collect_metrics(path_start: str) -> Tuple[pd.DataFrame, Dict[str, pd.DataFrame]]:
     base_dir = os.path.join(RESULTS_DIR_OUT, path_start)
     if not os.path.isdir(base_dir):
         return pd.DataFrame(), {}
     files = sorted([f for f in os.listdir(base_dir) if f.endswith("_metrics.csv")])
+    index = _load_index(path_start)
     histories = {}
     rows = []
     for fname in files:
@@ -78,10 +95,20 @@ def _collect_metrics(path_start: str) -> Tuple[pd.DataFrame, Dict[str, pd.DataFr
         stem = Path(fname).stem
         if not stem.endswith("_metrics"):
             continue
-        name = stem[:-8]
-        model_name, aug_name = name.rsplit("_", 1)
-        histories[f"{model_name} | {aug_name}"] = df
-        rows.append({"model": model_name, "augmentation": aug_name, "history": df})
+        checkpoint_id = stem[:-8]
+        meta = index.get(checkpoint_id, {})
+        model_name = meta.get("model_name", "unknown")
+        aug_name = meta.get("augmentation_name", "unknown")
+        label = f"{model_name} | {aug_name} | {checkpoint_id}"
+        histories[label] = df
+        rows.append(
+            {
+                "checkpoint_id": checkpoint_id,
+                "model": model_name,
+                "augmentation": aug_name,
+                "history": df,
+            }
+        )
     if not rows:
         return pd.DataFrame(), histories
 
@@ -94,6 +121,7 @@ def _collect_metrics(path_start: str) -> Tuple[pd.DataFrame, Dict[str, pd.DataFr
         idx = _best_index(df, metric) if metric else max(len(df) - 1, 0)
         best = df.iloc[idx].to_dict()
         best_row = {
+            "checkpoint_id": r["checkpoint_id"],
             "model": r["model"],
             "augmentation": r["augmentation"],
             "best_epoch": idx,
@@ -291,7 +319,7 @@ if run_clicked:
         params = _filter_kwargs(model_cls, params)
         model_configs.append({"name": name, "class": model_cls, "params": params})
 
-    augmentations = [aug_registry[a] for a in selected_augs] if selected_augs else [aug.none_augmentation]
+    augmentations = [(a, aug_registry[a]) for a in selected_augs] if selected_augs else [("none", aug.none_augmentation)]
 
     runner = BenchmarkRunner(
         model_configs=model_configs,
@@ -359,27 +387,33 @@ if selected_run:
                 best = ranked.iloc[0]
                 model_name = best["model"]
                 aug_name = best["augmentation"]
+                checkpoint_id = best["checkpoint_id"]
                 base_dir = os.path.join(RESULTS_DIR_OUT, selected_run)
-                model_dir = os.path.join(base_dir, f"{model_name}_{aug_name}")
-                model_file = os.path.join(base_dir, f"{model_name}_{aug_name}.pt")
+                index = _load_index(selected_run)
+                entry = index.get(checkpoint_id, {})
+                artifact_path = entry.get("artifact_path")
+                model_path = os.path.join(base_dir, artifact_path) if artifact_path else None
                 st.markdown(f"**Best run**: `{model_name}` + `{aug_name}`")
-                if os.path.isdir(model_dir):
-                    st.markdown(f"Saved model dir: `{model_dir}`")
-                elif os.path.isfile(model_file):
-                    st.markdown(f"Saved model file: `{model_file}`")
+                st.caption(f"Checkpoint: `{checkpoint_id}`")
+                if model_path and os.path.isdir(model_path):
+                    st.markdown(f"Saved model dir: `{model_path}`")
+                elif model_path and os.path.isfile(model_path):
+                    st.markdown(f"Saved model file: `{model_path}`")
                 else:
                     st.warning("Saved model not found on disk.")
 
                 if st.button("Copy best model to results/best_model", use_container_width=True):
                     best_path = os.path.join(base_dir, "best_model")
-                    if os.path.isdir(model_dir):
+                    if model_path and os.path.isdir(model_path):
                         if os.path.exists(best_path):
                             shutil.rmtree(best_path)
-                        shutil.copytree(model_dir, best_path)
+                        shutil.copytree(model_path, best_path)
                         st.success(f"Copied to {best_path}")
-                    elif os.path.isfile(model_file):
-                        shutil.copyfile(model_file, best_path + ".pt")
-                        st.success(f"Copied to {best_path}.pt")
+                    elif model_path and os.path.isfile(model_path):
+                        suffix = Path(model_path).suffix
+                        target = best_path + suffix
+                        shutil.copyfile(model_path, target)
+                        st.success(f"Copied to {target}")
                     else:
                         st.error("Nothing to copy.")
 
@@ -388,10 +422,10 @@ if selected_run:
                         try:
                             from huggingface_hub import HfApi
                             api = HfApi(token=hf_token or None)
-                            if os.path.isdir(model_dir):
-                                api.upload_folder(folder_path=model_dir, repo_id=hf_repo_name, repo_type="model")
-                            elif os.path.isfile(model_file):
-                                api.upload_file(path_or_fileobj=model_file, path_in_repo=os.path.basename(model_file), repo_id=hf_repo_name, repo_type="model")
+                            if model_path and os.path.isdir(model_path):
+                                api.upload_folder(folder_path=model_path, repo_id=hf_repo_name, repo_type="model")
+                            elif model_path and os.path.isfile(model_path):
+                                api.upload_file(path_or_fileobj=model_path, path_in_repo=os.path.basename(model_path), repo_id=hf_repo_name, repo_type="model")
                             else:
                                 st.error("Best model path missing.")
                                 st.stop()

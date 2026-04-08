@@ -1,7 +1,11 @@
 """
-NutriCoach - Stateful AI nutritionist Streamlit app.
-Uses LangGraph agent with structured memory, LLM intent classification,
-and proper tool calling.
+NutriCoach — Stateful AI nutritionist Streamlit app (v2).
+
+Changes from v1:
+- Uses LangGraph SqliteSaver for conversation persistence (replaced manual JSON)
+- Simplified agent state (no ghost fields)
+- Thread-based conversations via checkpointer config
+- Added food image analysis tab
 """
 
 import sys
@@ -10,7 +14,7 @@ import json
 import logging
 import uuid
 from pathlib import Path
-from datetime import datetime, date
+from datetime import datetime
 
 # Ensure imports work
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -27,9 +31,7 @@ from shared.config import SECRETS_DIR, STREAMLIT_CONFIG
 from shared.auth import (
     authenticate_user,
     register_user,
-    hash_password,
     load_user_info,
-    save_user_info,
 )
 from shared.memory import MemoryManager
 from shared.schemas import DailyLog, MealEntry
@@ -58,9 +60,8 @@ def initialize_session_state():
         "is_new_user": True,
         "show_register": False,
         "agent_graph": None,
-        "conversation_state": create_initial_state(),
+        "thread_id": None,
         "chat_history": [],
-        "chat_session_id": None,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -70,26 +71,31 @@ def initialize_session_state():
 initialize_session_state()
 
 
-# --- DRY Agent Invocation ---
+# --- Agent Invocation ---
+
+
+def _thread_config() -> dict:
+    """LangGraph config with thread_id for checkpointer."""
+    return {"configurable": {"thread_id": st.session_state.get("thread_id", "default")}}
 
 
 def invoke_agent(user_message: str) -> str:
     """
-    Single function for all agent invocations.
-    Replaces 4 duplicate blocks from the old streamlit_app.py.
-    Returns the assistant's response text.
+    Send a message to the agent and return the response.
+    The checkpointer handles state persistence automatically.
     """
     agent_graph = st.session_state["agent_graph"]
     if agent_graph is None:
         return "Agent not initialized. Please enter your API key."
 
-    state = st.session_state["conversation_state"].copy()
-    messages = state.get("messages", [])
-    state["messages"] = messages + [HumanMessage(content=user_message)]
-
     try:
-        result = agent_graph.invoke(state, {"recursion_limit": 20})
-        st.session_state["conversation_state"] = result
+        result = agent_graph.invoke(
+            {"messages": [HumanMessage(content=user_message)]},
+            config={
+                **_thread_config(),
+                "recursion_limit": 20,
+            },
+        )
 
         # Extract last AI message
         for msg in reversed(result.get("messages", [])):
@@ -98,7 +104,7 @@ def invoke_agent(user_message: str) -> str:
 
         return "I processed your message. How can I help?"
     except Exception as e:
-        logger.error(f"Agent invocation error: {e}")
+        logger.error("Agent invocation error: %s", e)
         return f"I encountered an error: {str(e)}. Please try again."
 
 
@@ -108,109 +114,19 @@ def send_message(user_message: str):
     with st.spinner("NutriCoach is thinking..."):
         response = invoke_agent(user_message)
     st.session_state["chat_history"].append(("assistant", response))
-
-    # Auto-save
-    username = st.session_state.get("username")
-    if username:
-        save_conversation_history(username)
     st.rerun()
 
 
-# --- Conversation Persistence ---
-
-
-def get_conversation_file(username, session_id=None):
-    sid = session_id or st.session_state.get("chat_session_id")
-    if sid:
-        return SECRETS_DIR / f"{username}_chat_{sid}.json"
-    return SECRETS_DIR / f"{username}_conversations.json"
-
-
-def save_conversation_history(username, session_id=None):
-    if not username:
-        return
-    conversation_file = get_conversation_file(username, session_id)
-    try:
-        state = st.session_state.get("conversation_state", {}).copy()
-        if "messages" in state:
-            serializable = []
-            for msg in state["messages"]:
-                if isinstance(msg, HumanMessage):
-                    serializable.append({"type": "human", "content": msg.content})
-                elif isinstance(msg, AIMessage):
-                    serializable.append({"type": "ai", "content": msg.content})
-            state["messages"] = serializable
-
-        data = {
-            "chat_session_id": st.session_state.get("chat_session_id"),
-            "conversation_state": state,
-            "chat_history": st.session_state.get("chat_history", []),
-            "last_updated": datetime.now().isoformat(),
-        }
-        SECRETS_DIR.mkdir(parents=True, exist_ok=True)
-        with open(conversation_file, "w") as f:
-            json.dump(data, f, indent=2, default=str)
-    except Exception as e:
-        logger.error(f"Error saving conversation: {e}")
-
-
-def load_conversation_history(username, session_id=None):
-    conversation_file = get_conversation_file(username, session_id)
-    try:
-        if conversation_file.exists() and conversation_file.stat().st_size > 0:
-            with open(conversation_file, "r") as f:
-                data = json.loads(f.read().strip())
-            if "chat_history" in data:
-                st.session_state["chat_history"] = data["chat_history"]
-            if "conversation_state" in data:
-                loaded_state = data["conversation_state"]
-                if "messages" in loaded_state:
-                    langchain_messages = []
-                    for msg in loaded_state["messages"]:
-                        if isinstance(msg, dict):
-                            if msg.get("type") == "human":
-                                langchain_messages.append(HumanMessage(content=msg["content"]))
-                            elif msg.get("type") == "ai":
-                                langchain_messages.append(AIMessage(content=msg["content"]))
-                        else:
-                            langchain_messages.append(msg)
-                    loaded_state["messages"] = langchain_messages
-                st.session_state["conversation_state"] = loaded_state
-            return True
-    except Exception as e:
-        logger.error(f"Error loading conversation: {e}")
-    return False
-
-
-def list_user_chat_sessions(username):
-    sessions = []
-    if not SECRETS_DIR.exists():
-        return sessions
-    for f in SECRETS_DIR.glob(f"{username}_chat_*.json"):
-        try:
-            with open(f) as fh:
-                data = json.loads(fh.read().strip())
-            sessions.append({
-                "session_id": data.get("chat_session_id", f.stem),
-                "message_count": len(data.get("chat_history", [])),
-                "last_updated": data.get("last_updated", ""),
-            })
-        except Exception:
-            continue
-    return sorted(sessions, key=lambda x: x["last_updated"], reverse=True)
+# --- Session Management (simplified with checkpointer) ---
 
 
 def start_new_chat_session():
-    st.session_state["chat_session_id"] = str(uuid.uuid4())[:8]
+    """Start a new chat thread."""
+    st.session_state["thread_id"] = str(uuid.uuid4())[:8]
     st.session_state["chat_history"] = []
     username = st.session_state.get("username")
-    st.session_state["conversation_state"] = create_initial_state(
-        profile_complete=username is not None
-    )
-    # Migrate and inject profile
     if username:
         _ensure_memory_migrated(username)
-        _inject_profile_context(username)
 
 
 def _ensure_memory_migrated(username):
@@ -220,21 +136,6 @@ def _ensure_memory_migrated(username):
         user_info = load_user_info(username, USERS_FILE)
         if user_info:
             memory.migrate_from_legacy(user_info)
-
-
-def _inject_profile_context(username):
-    """Mark profile as complete in conversation state."""
-    user_info = load_user_info(username, USERS_FILE)
-    if user_info:
-        st.session_state["conversation_state"]["profile_setup_complete"] = True
-        st.session_state["conversation_state"]["user_profile"] = {
-            "age": user_info.get("age"),
-            "weight": user_info.get("weight"),
-            "height": user_info.get("height"),
-            "gender": user_info.get("gender"),
-            "primary_goal": user_info.get("primary_goal"),
-            "activity_level": user_info.get("activity_level"),
-        }
 
 
 # --- Init Agent ---
@@ -277,9 +178,8 @@ def display_nutrition_dashboard():
         st.info("No daily logs yet. Start tracking your meals to see trends here!")
         return
 
-    # Build DataFrame from logs
     rows = []
-    for log in reversed(recent_logs):  # oldest first for charts
+    for log in reversed(recent_logs):
         rows.append({
             "Date": log.date,
             "Calories": log.total_calories or 0,
@@ -306,7 +206,6 @@ def display_nutrition_dashboard():
             fig = px.line(weight_df, x="Date", y="Weight (kg)", markers=True)
             st.plotly_chart(fig, use_container_width=True)
         else:
-            # Macro pie chart for latest day
             latest = rows[-1] if rows else {}
             if latest.get("Protein (g)") or latest.get("Carbs (g)") or latest.get("Fat (g)"):
                 st.markdown("**Today's Macros**")
@@ -336,6 +235,70 @@ def display_chat_interface():
     user_input = st.chat_input("Type your message here...")
     if user_input and st.session_state["agent_graph"]:
         send_message(user_input)
+
+
+# --- Food Image Analysis ---
+
+
+def display_food_analysis():
+    """Tab for analyzing food photos."""
+    st.subheader("Analyze Food Photo")
+    st.markdown("Upload a photo of your meal to estimate ingredients, portions, and calories.")
+
+    uploaded = st.file_uploader("Upload a food image", type=["jpg", "jpeg", "png", "webp"])
+
+    if uploaded:
+        col_img, col_result = st.columns([1, 1])
+        with col_img:
+            st.image(uploaded, caption="Your meal", use_container_width=True)
+
+        with col_result:
+            if st.button("Analyze with NutriCoach Agent"):
+                if st.session_state["agent_graph"]:
+                    # Save uploaded image temporarily
+                    tmp_path = SECRETS_DIR / f"_tmp_upload_{uploaded.name}"
+                    SECRETS_DIR.mkdir(parents=True, exist_ok=True)
+                    with open(tmp_path, "wb") as f:
+                        f.write(uploaded.getvalue())
+
+                    msg = f"Please analyze this food image and estimate the calories and macros: {tmp_path}"
+                    send_message(msg)
+
+    # Standalone comparison mode
+    st.markdown("---")
+    st.subheader("Compare Methods (standalone)")
+    st.markdown("Compare different analysis methods on the same image.")
+
+    uploaded2 = st.file_uploader("Upload image for comparison", type=["jpg", "jpeg", "png", "webp"], key="compare_upload")
+
+    method_options = ["vlm_claude", "vlm_claude_single", "clip_ensemble", "rag_vlm", "rf_detr"]
+    selected_methods = st.multiselect("Select methods to compare", method_options, default=["vlm_claude", "rag_vlm"])
+
+    if uploaded2 and selected_methods and st.button("Run Comparison"):
+        tmp_path = SECRETS_DIR / f"_tmp_compare_{uploaded2.name}"
+        with open(tmp_path, "wb") as f:
+            f.write(uploaded2.getvalue())
+
+        with st.spinner("Running comparison..."):
+            try:
+                from nutricoach.food_vision.compare import run_comparison, format_comparison
+                results = run_comparison(str(tmp_path), methods=selected_methods)
+                st.code(format_comparison(results), language="text")
+
+                # Show per-method details
+                for method, result in results.items():
+                    with st.expander(f"{method} — {result.total_calories:.0f} kcal"):
+                        if result.error:
+                            st.error(result.error)
+                        else:
+                            for item in result.food_items:
+                                st.write(
+                                    f"- **{item.name}**: {item.quantity_grams:.0f}g "
+                                    f"({item.calories:.0f} kcal, P:{item.protein_g:.1f}g, "
+                                    f"C:{item.carbs_g:.1f}g, F:{item.fat_g:.1f}g)"
+                                )
+            except Exception as e:
+                st.error(f"Comparison failed: {e}")
 
 
 # --- Quick Actions ---
@@ -552,7 +515,6 @@ def registration_form():
             st.session_state["initialized"] = True
             st.session_state["show_register"] = False
 
-            # Migrate to structured memory
             memory = MemoryManager(username, SECRETS_DIR)
             memory.migrate_from_legacy(profile)
 
@@ -583,7 +545,7 @@ def landing_page():
             st.session_state["is_new_user"] = False
             st.session_state["initialized"] = True
             start_new_chat_session()
-            st.success(f"Login successful! Started new chat session: {st.session_state['chat_session_id']}")
+            st.success(f"Login successful! Thread: {st.session_state['thread_id']}")
             st.rerun()
         else:
             st.error("Invalid credentials. Please try again or register.")
@@ -599,7 +561,7 @@ def landing_page():
 
 
 def main_app():
-    if not st.session_state.get("chat_session_id"):
+    if not st.session_state.get("thread_id"):
         start_new_chat_session()
 
     st.title("NutriCoach")
@@ -613,41 +575,25 @@ def main_app():
         st.markdown("---")
         display_user_profile()
 
-        username = st.session_state.get("username")
-        current_session = st.session_state.get("chat_session_id")
-        if username and current_session:
-            st.info(f"Session: {current_session}")
-
-            sessions = list_user_chat_sessions(username)
-            if sessions:
-                with st.expander(f"Previous Chats ({len(sessions)})"):
-                    for session in sessions[:5]:
-                        if session["session_id"] != current_session:
-                            col1, col2 = st.columns([3, 1])
-                            with col1:
-                                st.write(f"**{session['session_id']}** ({session['message_count']} msgs)")
-                            with col2:
-                                if st.button("Load", key=f"load_{session['session_id']}"):
-                                    if st.session_state.get("chat_history"):
-                                        save_conversation_history(username)
-                                    st.session_state["chat_session_id"] = session["session_id"]
-                                    load_conversation_history(username, session["session_id"])
-                                    st.rerun()
+        thread_id = st.session_state.get("thread_id")
+        if thread_id:
+            st.info(f"Thread: {thread_id}")
 
         st.markdown("---")
         if st.button("New Conversation"):
-            if username and st.session_state.get("chat_history"):
-                save_conversation_history(username)
             start_new_chat_session()
             st.rerun()
 
     # Main content tabs
-    tab_chat, tab_dashboard, tab_actions, tab_track = st.tabs([
-        "Chat", "Dashboard", "Quick Actions", "Daily Tracking",
+    tab_chat, tab_food, tab_dashboard, tab_actions, tab_track = st.tabs([
+        "Chat", "Food Analysis", "Dashboard", "Quick Actions", "Daily Tracking",
     ])
 
     with tab_chat:
         display_chat_interface()
+
+    with tab_food:
+        display_food_analysis()
 
     with tab_dashboard:
         display_nutrition_dashboard()
@@ -659,7 +605,7 @@ def main_app():
         display_daily_results()
 
     st.markdown("---")
-    st.caption("NutriCoach - Powered by LangGraph, Google Gemini, and structured memory")
+    st.caption("NutriCoach v2 — Powered by LangGraph + SqliteSaver, Google Gemini, and Food Vision")
 
 
 # --- Entry Point ---

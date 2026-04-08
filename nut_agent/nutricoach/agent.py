@@ -1,11 +1,17 @@
 """
-Redesigned NutriCoach LangGraph agent.
-Uses intent classification, proper tool calling via bind_tools/ToolNode,
-and structured memory system.
+NutriCoach LangGraph agent — v2 rewrite.
+
+Changes from v1 (based on feedback):
+- Dropped the expensive classify_intent LLM call (was "theater" — never routed)
+- Removed ghost state fields (user_profile, nutrition_targets, todays_log)
+- Uses SqliteSaver checkpointer for persistence (replaces ~80 lines of manual JSON)
+- Kept StateGraph instead of create_react_agent for future conditional routing
 """
 
 import os
-from typing import Annotated, Dict, Any, Optional
+import sqlite3
+from typing import Annotated, Any, Optional
+
 from typing_extensions import TypedDict
 
 from langgraph.graph import StateGraph, START, END
@@ -15,20 +21,14 @@ from langgraph.prebuilt import ToolNode
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
-from shared.config import GEMINI_MODEL, MAX_RECURSION_LIMIT, SECRETS_DIR
+from shared.config import GEMINI_MODEL, SECRETS_DIR
 from shared.memory import MemoryManager
-from nutricoach.intent import classify_intent, IntentSchema
 from nutricoach.tools import ALL_TOOLS, set_current_user
 
 
 class NutriCoachState(TypedDict):
-    """State for the NutriCoach agent."""
+    """Minimal state — only what the graph actually uses."""
     messages: Annotated[list, add_messages]
-    user_profile: Dict[str, Any]
-    nutrition_targets: Dict[str, Any]
-    todays_log: Dict[str, Any]
-    intent: str
-    profile_setup_complete: bool
 
 
 SYSTEM_PROMPT = """You are NutriCoach, a personalized AI nutritionist assistant.
@@ -38,6 +38,7 @@ Your role is to help users with their nutrition goals through:
 - Creating meal plans based on their preferences and constraints
 - Tracking daily food intake and progress
 - Analyzing trends and providing coaching
+- Analyzing food photos to estimate calories and macros
 
 Guidelines:
 - Use the available tools to perform calculations and log data — do NOT perform math yourself.
@@ -46,17 +47,37 @@ Guidelines:
 - When the user reports what they ate, use the log_daily_intake tool.
 - When asked about progress or trends, use the get_progress_summary tool.
 - When nutrition targets are needed, use calculate_personalized_nutrition_targets.
+- When the user shares a food photo, use the analyze_food_image tool.
 - Keep responses concise and actionable.
 """
 
 
-def build_nutricoach_graph(google_api_key: str, username: str) -> Any:
+def _get_checkpointer(username: str):
+    """Create a SqliteSaver checkpointer for persistent conversation state."""
+    try:
+        from langgraph.checkpoint.sqlite import SqliteSaver
+
+        db_path = SECRETS_DIR / f"{username}_checkpoints.db"
+        SECRETS_DIR.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        return SqliteSaver(conn)
+    except ImportError:
+        # Fallback: no persistence (works in-memory only)
+        return None
+
+
+def build_nutricoach_graph(
+    google_api_key: str,
+    username: str,
+    use_checkpointer: bool = True,
+) -> Any:
     """
     Build and return the NutriCoach LangGraph agent.
 
     Args:
         google_api_key: Google API key for Gemini
         username: Current user's username (for memory access)
+        use_checkpointer: Whether to use SqliteSaver for persistence
 
     Returns:
         Compiled LangGraph
@@ -75,38 +96,19 @@ def build_nutricoach_graph(google_api_key: str, username: str) -> Any:
 
     # --- Node definitions ---
 
-    def classify_intent_node(state: NutriCoachState) -> dict:
-        """Classify the user's intent from the latest message."""
-        messages = state.get("messages", [])
-        if not messages:
-            return {"intent": "general_chat"}
-
-        latest = messages[-1]
-        if not isinstance(latest, HumanMessage):
-            return {"intent": "general_chat"}
-
-        has_profile = state.get("profile_setup_complete", False)
-        intent_result = classify_intent(llm, latest.content, has_profile)
-        return {"intent": intent_result.intent}
-
     def agent_node(state: NutriCoachState) -> dict:
         """
         Main agent node. Calls LLM with tools bound.
         Context from memory system is injected as a system message.
         """
-        # Assemble context from structured memory
         context = memory.assemble_context()
-        intent = state.get("intent", "general_chat")
 
-        # Build system message with context
         system_content = SYSTEM_PROMPT
         if context:
             system_content += f"\n\n{context}"
-        system_content += f"\n\nUser's current intent: {intent}"
 
         system_msg = SystemMessage(content=system_content)
 
-        # Get conversation messages (exclude any prior system messages)
         conversation_messages = [
             m for m in state.get("messages", [])
             if not isinstance(m, SystemMessage)
@@ -133,26 +135,21 @@ def build_nutricoach_graph(google_api_key: str, username: str) -> Any:
 
     builder = StateGraph(NutriCoachState)
 
-    builder.add_node("classify_intent", classify_intent_node)
     builder.add_node("agent", agent_node)
     builder.add_node("tool_node", tool_node)
 
-    # Flow: START -> classify_intent -> agent -> (tool_node -> agent)* -> END
-    builder.add_edge(START, "classify_intent")
-    builder.add_edge("classify_intent", "agent")
+    # Simplified flow: START -> agent -> (tool_node -> agent)* -> END
+    builder.add_edge(START, "agent")
     builder.add_conditional_edges("agent", should_use_tools)
-    builder.add_edge("tool_node", "agent")  # Loop back after tool execution
+    builder.add_edge("tool_node", "agent")
 
-    return builder.compile()
+    # Compile with optional checkpointer
+    checkpointer = _get_checkpointer(username) if use_checkpointer else None
+    return builder.compile(checkpointer=checkpointer)
 
 
-def create_initial_state(profile_complete: bool = False) -> NutriCoachState:
+def create_initial_state() -> NutriCoachState:
     """Create the initial state for a new conversation."""
     return {
         "messages": [],
-        "user_profile": {},
-        "nutrition_targets": {},
-        "todays_log": {},
-        "intent": "general_chat",
-        "profile_setup_complete": profile_complete,
     }

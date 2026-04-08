@@ -25,6 +25,7 @@ from shared.schemas import (
     DailyLog,
     MealEntry,
 )
+from nutricoach.food_vision.base import FoodAnalysisResult
 
 
 # Module-level reference set by agent.py at graph build time
@@ -318,10 +319,81 @@ def update_user_profile(field: str, value: str) -> Dict[str, Any]:
         return {"error": f"Failed to update profile: {str(e)}"}
 
 
+@tool
+def analyze_food_image(
+    image_path: str,
+    method: str = "rag_vlm",
+) -> Dict[str, Any]:
+    """
+    Analyze a food photo to identify ingredients, estimate portions, and compute calories/macros.
+
+    Args:
+        image_path: Path to the food image file
+        method: Analysis method — 'vlm_claude' (pure LLM), 'rag_vlm' (RAG-enhanced, recommended),
+                'clip_ensemble' (CLIP + LLM), 'rf_detr' (object detection)
+
+    Returns:
+        Dictionary with detected food items and nutritional breakdown
+    """
+    import os
+
+    if not os.path.exists(image_path):
+        return {"error": f"Image not found: {image_path}"}
+
+    try:
+        analyzer = None
+
+        if method == "vlm_claude":
+            from nutricoach.food_vision.vlm_analyzer import VLMAnalyzer
+            analyzer = VLMAnalyzer()
+        elif method == "rag_vlm":
+            from nutricoach.food_vision.rag_vlm_analyzer import RAGVLMAnalyzer
+            analyzer = RAGVLMAnalyzer()
+        elif method == "clip_ensemble":
+            from nutricoach.food_vision.clip_analyzer import CLIPFoodAnalyzer
+            analyzer = CLIPFoodAnalyzer()
+        elif method == "rf_detr":
+            from nutricoach.food_vision.rf_detr_analyzer import RFDETRAnalyzer
+            analyzer = RFDETRAnalyzer()
+        else:
+            return {"error": f"Unknown method: {method}. Use 'vlm_claude', 'rag_vlm', 'clip_ensemble', or 'rf_detr'"}
+
+        result = analyzer.analyze(image_path)
+
+        # Also log the meal if we have a user context
+        memory = _get_memory()
+        if memory and result.food_items and not result.error:
+            today = date.today().isoformat()
+            existing_log = memory.load_daily_log(today)
+            log = existing_log if existing_log else DailyLog(date=today)
+
+            description = ", ".join(
+                f"{f.name} ({f.quantity_grams:.0f}g, {f.calories:.0f}kcal)"
+                for f in result.food_items
+            )
+            log.meals.append(MealEntry(
+                meal_type="photo_analysis",
+                description=description[:500],
+                estimated_calories=int(result.total_calories),
+                estimated_protein_g=result.total_protein_g,
+                estimated_carbs_g=result.total_carbs_g,
+                estimated_fat_g=result.total_fat_g,
+            ))
+            memory.save_daily_log(log)
+
+        return result.to_dict()
+
+    except ImportError as e:
+        return {"error": f"Missing dependency for method '{method}': {str(e)}"}
+    except Exception as e:
+        return {"error": f"Analysis failed: {str(e)}"}
+
+
 # List of all tools for the agent
 ALL_TOOLS = [
     calculate_personalized_nutrition_targets,
     log_daily_intake,
     get_progress_summary,
     update_user_profile,
+    analyze_food_image,
 ]

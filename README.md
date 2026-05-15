@@ -5,7 +5,7 @@ Modular platform for ML research across multiple domains: food prediction (recip
 ## Project Structure
 
 - **ml_pipeline/**: Core ML experimentation suite (augmentation, pipelines, benchmarking, reproducibility, results). See `ml_pipeline/README.md`
-- **nut_agent/**: Two Streamlit apps — **NutriCoach** (LLM-powered nutritionist agent) and **Recipe Lab** (ML-powered recipe analyzer). See `nut_agent/README.md`
+- **nut_agent/**: Two Streamlit apps: **NutriCoach** (LLM-powered nutritionist agent) and **Recipe Lab** (ML-powered recipe analyzer). See `nut_agent/README.md`
 
 ## Quickstart
 
@@ -32,10 +32,10 @@ source ~/.bash_profile
 ## Testing
 
 ```bash
-# ml_pipeline (64 tests — scoring, wrappers, pipelines, checkpoints, benchmarks)
+# ml_pipeline (64 tests: scoring, wrappers, pipelines, checkpoints, benchmarks)
 cd ml_pipeline && python -m pytest tests/ -v
 
-# nut_agent (86 tests — utils, auth, memory, predictor, intent, agent)
+# nut_agent (86 tests: utils, auth, memory, predictor, intent, agent)
 cd nut_agent && python -m pytest tests/ -v
 ```
 

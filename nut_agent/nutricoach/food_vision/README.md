@@ -1,4 +1,4 @@
-# Food Vision — Multi-Method Food Image Analysis
+# Food Vision: Multi-Method Food Image Analysis
 
 Analyze food photos to estimate ingredients, portion sizes, and calories/macros.  
 Four methods are implemented for comparison, from traditional CV to pure LLM.
@@ -6,7 +6,7 @@ Four methods are implemented for comparison, from traditional CV to pure LLM.
 ## Methods
 
 ### Method 1: RF-DETR Fine-Tuning (`rf_detr_analyzer.py`)
-- **Architecture**: RF-DETR (ICLR 2026) — DINOv2 backbone + deformable attention
+- **Architecture**: RF-DETR (ICLR 2026), DINOv2 backbone + deformable attention
 - **Approach**: Object detection with bounding boxes → portion estimation from bbox area → nutrition DB lookup
 - **Fine-tuning**: Supports training on FoodSeg103, UEC-FoodPix, or custom COCO-format datasets via `RFDETRFoodTrainer`
 - **Strengths**: Real-time inference, runs locally, no API costs
@@ -15,8 +15,8 @@ Four methods are implemented for comparison, from traditional CV to pure LLM.
 
 ### Method 2: Pure vLLM via OpenRouter (`vlm_analyzer.py`)
 - **Architecture**: Claude Opus 4.6 via OpenRouter API
-- **Approach**: 3-step chained prompts — (1) identify foods, (2) estimate portions, (3) compute nutrition
-- **Also includes**: `VLMAnalyzerSingleShot` — single comprehensive prompt variant (faster, cheaper)
+- **Approach**: 3-step chained prompts: (1) identify foods, (2) estimate portions, (3) compute nutrition
+- **Also includes**: `VLMAnalyzerSingleShot`, a single comprehensive prompt variant (faster, cheaper)
 - **Strengths**: Best food identification (handles complex dishes, mixed meals, sauces); no model training needed
 - **Weaknesses**: API cost (~$0.01-0.05/image), latency (3-10s), no local fallback
 - **Install**: `pip install openai` + set `OPENROUTER_API_KEY`
@@ -28,7 +28,7 @@ Four methods are implemented for comparison, from traditional CV to pure LLM.
 - **Weaknesses**: CLIP single-label classification misses multiple items; LLM refinement still needs API
 - **Install**: `pip install transformers torch openai`
 
-### Method 4: RAG-Enhanced VLM — DietAI24-inspired (`rag_vlm_analyzer.py`)
+### Method 4: RAG-Enhanced VLM, DietAI24-inspired (`rag_vlm_analyzer.py`)
 - **Architecture**: Claude Opus via OpenRouter + local nutrition DB retrieval
 - **Approach**: VLM identifies foods → retrieve per-100g nutrition data from DB → VLM reasons over image + DB data → cross-validate portions against standard serving sizes
 - **Strengths**: Grounds calorie estimates in real nutrition data (reduces hallucination); cross-validates portions; most accurate method

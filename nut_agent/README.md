@@ -11,7 +11,7 @@ nut_agent/
     utils.py             BMI calculation, nutrition target validation
     auth.py              Argon2 password hashing, user registration/login
     schemas.py           Pydantic models (UserProfile, DailyLog, NutritionTargets, etc.)
-    memory.py            MemoryManager — per-user structured storage with bounded context
+    memory.py            MemoryManager: per-user structured storage with bounded context
   nutricoach/          Stateful LLM-powered nutritionist agent
     agent.py             LangGraph v2 agent with SqliteSaver checkpointer
     tools.py             Agent tools (targets, intake, progress, profile, food image analysis)
@@ -24,7 +24,7 @@ nut_agent/
       vlm_analyzer.py      Method 2: Pure vLLM (Claude Opus via OpenRouter, 3-step chain)
       clip_analyzer.py     Method 3: CLIP zero-shot + LLM ensemble
       rag_vlm_analyzer.py  Method 4: RAG-enhanced VLM (DietAI24-inspired)
-      compare.py           Comparison framework — benchmark all methods side-by-side
+      compare.py           Comparison framework: benchmark all methods side-by-side
       README.md            Detailed docs for food vision module
   recipe_lab/          Stateless ML recipe analyzer
     predictor.py         Embedding-based prediction (difficulty, meal type, time class)
@@ -65,10 +65,10 @@ START -> agent -> (tool_node -> agent)* -> END
 ```
 
 **v2 changes** (based on [feedback analysis](../todo/)):
-- **Dropped intent classification node** — was an extra LLM call that never actually routed; now the agent handles intent naturally
-- **SqliteSaver checkpointer** — replaces ~80 lines of manual JSON serialization for conversation persistence
-- **Removed ghost state fields** — `user_profile`, `nutrition_targets`, `todays_log` were declared but never read; state now contains only `messages`
-- **Added food image analysis** — new `analyze_food_image` tool with 4 analysis methods
+- **Dropped intent classification node**: was an extra LLM call that never actually routed; now the agent handles intent naturally
+- **SqliteSaver checkpointer**: replaces ~80 lines of manual JSON serialization for conversation persistence
+- **Removed ghost state fields**: `user_profile`, `nutrition_targets`, `todays_log` were declared but never read; state now contains only `messages`
+- **Added food image analysis**: new `analyze_food_image` tool with 4 analysis methods
 
 ### Tools
 
@@ -86,10 +86,10 @@ Take a photo of your plate → get estimated ingredients, quantities, and calori
 
 4 methods available (see [food_vision/README.md](nutricoach/food_vision/README.md)):
 
-1. **RF-DETR** — Object detection (needs fine-tuning, runs offline)
-2. **Pure vLLM** — Claude Opus 3-step prompt chain via OpenRouter
-3. **CLIP + LLM** — Zero-shot classification + LLM refinement
-4. **RAG VLM** — Database-grounded VLM estimation (recommended)
+1. **RF-DETR**: Object detection (needs fine-tuning, runs offline)
+2. **Pure vLLM**: Claude Opus 3-step prompt chain via OpenRouter
+3. **CLIP + LLM**: Zero-shot classification + LLM refinement
+4. **RAG VLM**: Database-grounded VLM estimation (recommended)
 
 ### Persistence
 
@@ -122,7 +122,7 @@ for msg in reversed(result["messages"]):
 
 ## Recipe Lab
 
-Standalone recipe analyzer — no login, no conversation state:
+Standalone recipe analyzer, with no login or conversation state:
 
 - **Analyze** a recipe: ML predictions (difficulty, meal type, time class) + optional LLM interpretation
 - **Compare** two recipes side-by-side
@@ -131,15 +131,15 @@ Standalone recipe analyzer — no login, no conversation state:
 ## Configuration
 
 Nutrition constants are in `shared/config.py`:
-- `BMR_CONSTANTS` — Mifflin-St Jeor equation parameters
-- `ACTIVITY_MULTIPLIERS` — sedentary through very active
-- `MACRO_RATIOS` — protein/carb/fat distribution
-- `WEIGHT_GOAL_ADJUSTMENTS` — caloric surplus/deficit for goals
+- `BMR_CONSTANTS`: Mifflin-St Jeor equation parameters
+- `ACTIVITY_MULTIPLIERS`: sedentary through very active
+- `MACRO_RATIOS`: protein/carb/fat distribution
+- `WEIGHT_GOAL_ADJUSTMENTS`: caloric surplus/deficit for goals
 
 Environment variables:
-- `GOOGLE_API_KEY` — Required for Gemini LLM
-- `OPENROUTER_API_KEY` — Required for food image analysis (Methods 2-4)
-- `ROBOFLOW_API_KEY` — Optional, for downloading food detection datasets
+- `GOOGLE_API_KEY`: Required for Gemini LLM
+- `OPENROUTER_API_KEY`: Required for food image analysis (Methods 2-4)
+- `ROBOFLOW_API_KEY`: Optional, for downloading food detection datasets
 
 ## Testing
 

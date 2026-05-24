@@ -10,7 +10,7 @@ Modular platform for ML research across multiple domains: food prediction (recip
 
 ## Quickstart
 
-1. Install dependencies: `uv pip install -r requirements.txt`
+1. Install dependencies: `uv pip install -r requirements.txt` for the standard environment, or `uv pip install -r requirements_gpu.in` on the CUDA 12.4 GPU VM used for notebook training.
 2. Interactive Benchmark UI: `cd ml_pipeline && streamlit run benchmark_app.py` (with OpenMP configured)
 3. Launch NutriCoach: `cd nut_agent && streamlit run nutricoach/app.py`
 4. Launch Recipe Lab: `cd nut_agent && streamlit run recipe_lab/app.py`

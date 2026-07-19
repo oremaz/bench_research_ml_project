@@ -14,6 +14,7 @@ from .schemas import (
     NutritionTargets,
     DailyLog,
     WeeklySummary,
+    MealPlan,
     ConversationEntry,
 )
 
@@ -104,6 +105,21 @@ class MemoryManager:
         path = self.user_dir / "weekly_summaries" / f"{summary.week_id}.json"
         self._write_json(path, summary.model_dump())
 
+    # --- Meal Plans ---
+
+    def load_meal_plan(self, week_id: Optional[str] = None) -> Optional[MealPlan]:
+        if week_id is None:
+            week_id = date.today().strftime("%G-W%V")
+        path = self.user_dir / "meal_plans" / f"{week_id}.json"
+        data = self._read_json(path)
+        if data is None:
+            return None
+        return MealPlan(**data)
+
+    def save_meal_plan(self, plan: MealPlan) -> None:
+        path = self.user_dir / "meal_plans" / f"{plan.week_id}.json"
+        self._write_json(path, plan.model_dump())
+
     # --- Conversation Index ---
 
     def load_conversation_index(self) -> List[ConversationEntry]:
@@ -166,6 +182,12 @@ class MemoryManager:
         weekly = self.load_current_week_summary()
         if weekly:
             sections.append(self._format_weekly_context(weekly))
+
+        # Current meal plan (bounded excerpt)
+        plan = self.load_meal_plan()
+        if plan:
+            excerpt = " ".join(plan.plan_text.split())[:300]
+            sections.append(f"MEAL PLAN ({plan.week_id}): {excerpt}")
 
         if not sections:
             return ""

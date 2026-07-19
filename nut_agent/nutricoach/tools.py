@@ -24,6 +24,8 @@ from shared.schemas import (
     NutritionTargets,
     DailyLog,
     MealEntry,
+    MealPlan,
+    WeeklySummary,
 )
 from nutricoach.food_vision.base import FoodAnalysisResult
 
@@ -42,6 +44,19 @@ def _get_memory() -> Optional[MemoryManager]:
     if _current_username:
         return MemoryManager(_current_username, SECRETS_DIR)
     return None
+
+
+def _recompute_daily_totals(log: DailyLog) -> None:
+    """Recompute log totals from per-meal estimates (None if no meal has estimates)."""
+    def _total(attr):
+        vals = [getattr(m, attr) for m in log.meals if getattr(m, attr) is not None]
+        return round(sum(vals), 1) if vals else None
+
+    cal = _total("estimated_calories")
+    log.total_calories = int(cal) if cal is not None else None
+    log.total_protein_g = _total("estimated_protein_g")
+    log.total_carbs_g = _total("estimated_carbs_g")
+    log.total_fat_g = _total("estimated_fat_g")
 
 
 @tool
@@ -141,6 +156,11 @@ def log_daily_intake(
     weight_kg: Optional[float] = None,
     energy_level: Optional[str] = None,
     notes: Optional[str] = None,
+    meal_type: Optional[str] = None,
+    estimated_calories: Optional[int] = None,
+    estimated_protein_g: Optional[float] = None,
+    estimated_carbs_g: Optional[float] = None,
+    estimated_fat_g: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Log the user's daily food intake, weight, and notes.
@@ -150,9 +170,14 @@ def log_daily_intake(
         weight_kg: Optional current weight in kg
         energy_level: Optional energy level ('low', 'moderate', 'high')
         notes: Optional additional notes about the day
+        meal_type: Optional meal slot ('breakfast', 'lunch', 'dinner', 'snack')
+        estimated_calories: Your estimate of the calories in this meal (always provide it)
+        estimated_protein_g: Your estimate of protein grams
+        estimated_carbs_g: Your estimate of carb grams
+        estimated_fat_g: Your estimate of fat grams
 
     Returns:
-        Confirmation of logged data
+        Confirmation of logged data with updated daily totals
     """
     memory = _get_memory()
     if not memory:
@@ -169,9 +194,14 @@ def log_daily_intake(
 
         # Add a meal entry from the description
         log.meals.append(MealEntry(
-            meal_type="logged",
+            meal_type=meal_type or "logged",
             description=meals_description[:500],
+            estimated_calories=estimated_calories,
+            estimated_protein_g=estimated_protein_g,
+            estimated_carbs_g=estimated_carbs_g,
+            estimated_fat_g=estimated_fat_g,
         ))
+        _recompute_daily_totals(log)
 
         if weight_kg is not None:
             log.weight_kg = weight_kg
@@ -187,6 +217,7 @@ def log_daily_intake(
             "date": today,
             "meals_count": len(log.meals),
             "weight_kg": log.weight_kg,
+            "total_calories_today": log.total_calories,
             "message": f"Successfully logged intake for {today}",
         }
 
@@ -379,6 +410,7 @@ def analyze_food_image(
                 estimated_carbs_g=result.total_carbs_g,
                 estimated_fat_g=result.total_fat_g,
             ))
+            _recompute_daily_totals(log)
             memory.save_daily_log(log)
 
         return result.to_dict()
@@ -389,6 +421,255 @@ def analyze_food_image(
         return {"error": f"Analysis failed: {str(e)}"}
 
 
+@tool
+def log_water_intake(amount_ml: float) -> Dict[str, Any]:
+    """
+    Add water intake to today's log.
+
+    Args:
+        amount_ml: Amount of water just drunk, in milliliters (a glass is ~250ml)
+
+    Returns:
+        Updated water total for today and remaining amount vs target
+    """
+    memory = _get_memory()
+    if not memory:
+        return {"error": "No user context available"}
+
+    try:
+        today = date.today().isoformat()
+        log = memory.load_daily_log(today) or DailyLog(date=today)
+        log.water_intake_ml = (log.water_intake_ml or 0) + amount_ml
+        memory.save_daily_log(log)
+
+        result = {
+            "logged": True,
+            "water_today_ml": log.water_intake_ml,
+        }
+        targets = memory.load_nutrition_targets()
+        if targets:
+            result["target_water_ml"] = targets.target_water_ml
+            result["remaining_ml"] = max(0, targets.target_water_ml - log.water_intake_ml)
+        return result
+
+    except Exception as e:
+        return {"error": f"Failed to log water: {str(e)}"}
+
+
+@tool
+def lookup_food_nutrition(food_name: str, grams: float = 100.0) -> Dict[str, Any]:
+    """
+    Look up calories and macros for a food in the local nutrition database
+    (USDA/CIQUAL per-100g values, no API cost). Use for questions like
+    "how many calories in 150g of salmon?".
+
+    Args:
+        food_name: Food to look up (fuzzy matching supported)
+        grams: Portion size in grams (default 100)
+
+    Returns:
+        Nutrition values for the requested portion, or closest matches if not found
+    """
+    from nutricoach.food_vision.nutrition_db import NutritionDB
+
+    try:
+        db = NutritionDB()
+        matched_name, info = db.lookup_with_name(food_name)
+        if info is None:
+            return {
+                "found": False,
+                "food_name": food_name,
+                "message": "Not in local database; estimate from your own knowledge.",
+            }
+        factor = grams / 100.0
+        return {
+            "found": True,
+            "query": food_name,
+            "matched_food": matched_name,
+            "grams": grams,
+            "calories": round(info.calories * factor, 1),
+            "protein_g": round(info.protein_g * factor, 1),
+            "carbs_g": round(info.carbs_g * factor, 1),
+            "fat_g": round(info.fat_g * factor, 1),
+        }
+    except Exception as e:
+        return {"error": f"Lookup failed: {str(e)}"}
+
+
+@tool
+def get_remaining_daily_budget() -> Dict[str, Any]:
+    """
+    Compute what the user can still eat and drink today: nutrition targets
+    minus everything logged so far. Use for questions like "what's left for
+    dinner?" or "can I have a snack?".
+
+    Returns:
+        Remaining calories, macros, and water for today
+    """
+    memory = _get_memory()
+    if not memory:
+        return {"error": "No user context available"}
+
+    try:
+        targets = memory.load_nutrition_targets()
+        if targets is None:
+            return {"error": "No nutrition targets set. Calculate targets first."}
+
+        log = memory.load_todays_log()
+        consumed = {
+            "calories": (log.total_calories or 0) if log else 0,
+            "protein_g": (log.total_protein_g or 0) if log else 0,
+            "carbs_g": (log.total_carbs_g or 0) if log else 0,
+            "fat_g": (log.total_fat_g or 0) if log else 0,
+            "water_ml": (log.water_intake_ml or 0) if log else 0,
+        }
+        meals_logged = len(log.meals) if log else 0
+
+        return {
+            "date": date.today().isoformat(),
+            "meals_logged": meals_logged,
+            "consumed": consumed,
+            "remaining": {
+                "calories": round(targets.target_calories - consumed["calories"]),
+                "protein_g": round(targets.target_protein_g - consumed["protein_g"], 1),
+                "carbs_g": round(targets.target_carbs_g - consumed["carbs_g"], 1),
+                "fat_g": round(targets.target_fat_g - consumed["fat_g"], 1),
+                "water_ml": round(targets.target_water_ml - consumed["water_ml"]),
+            },
+            "note": "Remaining values can be negative if the user exceeded a target.",
+        }
+
+    except Exception as e:
+        return {"error": f"Failed to compute budget: {str(e)}"}
+
+
+@tool
+def save_meal_plan(plan_text: str, notes: str = "") -> Dict[str, Any]:
+    """
+    Save the meal plan agreed with the user for the current week. Call this
+    after presenting a meal plan the user accepts, passing the full plan text.
+    The stored plan is used for daily compliance tracking and grocery lists.
+
+    Args:
+        plan_text: The complete meal plan (all days and meals)
+        notes: Optional notes (constraints, substitutions)
+
+    Returns:
+        Confirmation with the week id
+    """
+    memory = _get_memory()
+    if not memory:
+        return {"error": "No user context available"}
+
+    try:
+        from datetime import datetime
+        week_id = date.today().strftime("%G-W%V")
+        plan = MealPlan(
+            week_id=week_id,
+            plan_text=plan_text,
+            created_at=datetime.now().isoformat(),
+            notes=notes,
+        )
+        memory.save_meal_plan(plan)
+        return {"saved": True, "week_id": week_id, "message": f"Meal plan saved for week {week_id}"}
+    except Exception as e:
+        return {"error": f"Failed to save meal plan: {str(e)}"}
+
+
+@tool
+def get_meal_plan(week_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Retrieve the stored meal plan for a week. Use it to answer "what's for
+    dinner today?", check compliance, or build a grocery/shopping list from
+    the plan's ingredients.
+
+    Args:
+        week_id: Week in YYYY-Wnn format (default: current week)
+
+    Returns:
+        The stored meal plan, or a message if none exists
+    """
+    memory = _get_memory()
+    if not memory:
+        return {"error": "No user context available"}
+
+    try:
+        plan = memory.load_meal_plan(week_id)
+        if plan is None:
+            return {
+                "found": False,
+                "message": "No meal plan stored for this week. Offer to create one.",
+            }
+        return {
+            "found": True,
+            "week_id": plan.week_id,
+            "plan_text": plan.plan_text,
+            "notes": plan.notes,
+            "created_at": plan.created_at,
+        }
+    except Exception as e:
+        return {"error": f"Failed to load meal plan: {str(e)}"}
+
+
+@tool
+def generate_weekly_summary() -> Dict[str, Any]:
+    """
+    Aggregate the last 7 daily logs into a weekly summary (average calories,
+    compliance, weight change) and store it. Use when the user asks for a
+    weekly review or at the end of the week.
+
+    Returns:
+        The computed weekly statistics
+    """
+    memory = _get_memory()
+    if not memory:
+        return {"error": "No user context available"}
+
+    try:
+        from datetime import datetime, timedelta
+
+        logs = memory.load_recent_daily_logs(n=7)
+        if not logs:
+            return {"error": "No daily logs available for a weekly summary."}
+
+        today = date.today()
+        week_id = today.strftime("%G-W%V")
+        start = today - timedelta(days=today.weekday())
+
+        calories = [l.total_calories for l in logs if l.total_calories is not None]
+        protein = [l.total_protein_g for l in logs if l.total_protein_g is not None]
+        compliance = [l.compliance_score for l in logs if l.compliance_score is not None]
+        weights = [(l.date, l.weight_kg) for l in logs if l.weight_kg is not None]
+        weights.sort(key=lambda t: t[0])
+
+        summary = WeeklySummary(
+            week_id=week_id,
+            start_date=start.isoformat(),
+            end_date=(start + timedelta(days=6)).isoformat(),
+            avg_daily_calories=round(sum(calories) / len(calories), 1) if calories else None,
+            avg_daily_protein_g=round(sum(protein) / len(protein), 1) if protein else None,
+            avg_compliance_score=round(sum(compliance) / len(compliance), 2) if compliance else None,
+            weight_start=weights[0][1] if weights else None,
+            weight_end=weights[-1][1] if weights else None,
+            weight_change=round(weights[-1][1] - weights[0][1], 1) if len(weights) > 1 else None,
+            days_logged=len(logs),
+        )
+        memory.save_weekly_summary(summary)
+
+        return {
+            "saved": True,
+            "week_id": week_id,
+            "days_logged": summary.days_logged,
+            "avg_daily_calories": summary.avg_daily_calories,
+            "avg_daily_protein_g": summary.avg_daily_protein_g,
+            "avg_compliance_score": summary.avg_compliance_score,
+            "weight_change_kg": summary.weight_change,
+        }
+
+    except Exception as e:
+        return {"error": f"Failed to generate weekly summary: {str(e)}"}
+
+
 # List of all tools for the agent
 ALL_TOOLS = [
     calculate_personalized_nutrition_targets,
@@ -396,4 +677,10 @@ ALL_TOOLS = [
     get_progress_summary,
     update_user_profile,
     analyze_food_image,
+    log_water_intake,
+    lookup_food_nutrition,
+    get_remaining_daily_budget,
+    save_meal_plan,
+    get_meal_plan,
+    generate_weekly_summary,
 ]

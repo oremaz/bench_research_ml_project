@@ -1,0 +1,714 @@
+omazor@epyc4:~$ cd /scratch/omazor
+omazor@epyc4:/scratch/omazor$ ms
+-bash: ms: command not found
+omazor@epyc4:/scratch/omazor$ ms
+-bash: ms: command not found
+omazor@epyc4:/scratch/omazor$ ls
+bench_research_ml_project  mlflow.db  stage_orel_inria
+omazor@epyc4:/scratch/omazor$ cd bench_research_ml_project
+omazor@epyc4:/scratch/omazor/bench_research_ml_project$ source .venv/bin/activate
+(bench_research_ml_project) omazor@epyc4:/scratch/omazor/bench_research_ml_project$ jupyter execute ml_pipeline/bench-imai-artifact.ipynb
+[NbClientApp] Executing ml_pipeline/bench-imai-artifact.ipynb
+[NbClientApp] Executing notebook with kernel: python3
+^C^C[IPKernelApp] ERROR | Exception in message handler:
+Traceback (most recent call last):
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/ipykernel/kernelbase.py", line 471, in dispatch_shell
+    await result
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/ipykernel/ipkernel.py", line 366, in execute_request
+    await super().execute_request(stream, ident, parent)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/ipykernel/kernelbase.py", line 850, in execute_request
+    reply_msg: dict[str, t.Any] = self.session.send(  # type:ignore[assignment]
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/jupyter_client/session.py", line 862, in send
+    stream.send_multipart(to_send, copy=copy)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/zmq/sugar/socket.py", line 749, in send_multipart
+    self.send(msg, zmq.SNDMORE | flags, copy=copy, track=track)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/zmq/sugar/socket.py", line 698, in send
+    return super().send(data, flags=flags, copy=copy, track=track)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "zmq/backend/cython/_zmq.py", line 1152, in zmq.backend.cython._zmq.Socket.send
+    def send(self, data, flags=0, copy: bint = True, track: bint = False):
+    ^^^^^^^^^^^
+  File "zmq/backend/cython/_zmq.py", line 1194, in zmq.backend.cython._zmq.Socket.send
+    _check_closed(self)
+    ^^^^^^^^^^^
+  File "zmq/backend/cython/_zmq.py", line 1339, in zmq.backend.cython._zmq._check_closed
+    raise ZMQError(ENOTSOCK)
+    ^^^^^^^^^^^
+zmq.error.ZMQError: Socket operation on non-socket
+Traceback (most recent call last):
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 657, in async_setup_kernel
+    raise e
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 654, in async_setup_kernel
+    yield
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 709, in async_execute
+    await self.async_execute_cell(
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 1009, in async_execute_cell
+    raise DeadKernelError("Kernel died") from None
+nbclient.exceptions.DeadKernelError: Kernel died
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/scratch/omazor/bench_research_ml_project/.venv/bin/jupyter-execute", line 10, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+    super().launch_instance(argv=argv, **kwargs)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/traitlets/config/application.py", line 1074, in launch_instance
+    app.initialize(argv)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/traitlets/config/application.py", line 118, in inner
+    return method(app, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/cli.py", line 161, in initialize
+    self.run_notebook(path)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/cli.py", line 215, in run_notebook
+    client.execute()
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/omazor/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 693, in async_execute
+    async with self.async_setup_kernel(**kwargs):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/omazor/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py", line 231, in __aexit__
+    await self.gen.athrow(value)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 660, in async_setup_kernel
+    await self._async_cleanup_kernel()
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 504, in _async_cleanup_kernel
+    assert self.km is not None
+           ^^^^^^^^^^^^^^^^^^^
+AssertionError
+^C
+(bench_research_ml_project) omazor@epyc4:/scratch/omazor/bench_research_ml_project$ git pull
+remote: Enumerating objects: 17, done.
+remote: Counting objects: 100% (17/17), done.
+remote: Compressing objects: 100% (2/2), done.
+remote: Total 9 (delta 7), reused 9 (delta 7), pack-reused 0 (from 0)
+Unpacking objects: 100% (9/9), 3.18 KiB | 2.00 KiB/s, done.
+From github.com:oremaz/bench_research_ml_project
+   7b53e1d87..1063d2b96  main       -> origin/main
+Updating 7b53e1d87..1063d2b96
+Fast-forward
+ ai_content_detector/README.md                    | 36 +++++++++++++++++++++++++++++-------
+ ai_content_detector/app.py                       | 31 +++++++++++++++++++++++++++++--
+ ai_content_detector/detectors/ensemble.py        | 37 ++++++++++++++++++++++++++++++++++++-
+ ai_content_detector/detectors/image_detectors.py |  4 ++++
+ ai_content_detector/detectors/text_detectors.py  |  3 +--
+ 5 files changed, 99 insertions(+), 12 deletions(-)
+(bench_research_ml_project) omazor@epyc4:/scratch/omazor/bench_research_ml_project$ jupyter execute ml_pipeline/bench-imai-artifact.ipynb
+[NbClientApp] Executing ml_pipeline/bench-imai-artifact.ipynb
+[NbClientApp] Executing notebook with kernel: python3
+^C^C[IPKernelApp] ERROR | Exception in message handler:
+Traceback (most recent call last):
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/ipykernel/kernelbase.py", line 471, in dispatch_shell
+    await result
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/ipykernel/ipkernel.py", line 366, in execute_request
+    await super().execute_request(stream, ident, parent)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/ipykernel/kernelbase.py", line 850, in execute_request
+    reply_msg: dict[str, t.Any] = self.session.send(  # type:ignore[assignment]
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/jupyter_client/session.py", line 862, in send
+    stream.send_multipart(to_send, copy=copy)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/zmq/sugar/socket.py", line 749, in send_multipart
+    self.send(msg, zmq.SNDMORE | flags, copy=copy, track=track)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/zmq/sugar/socket.py", line 698, in send
+    return super().send(data, flags=flags, copy=copy, track=track)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "zmq/backend/cython/_zmq.py", line 1152, in zmq.backend.cython._zmq.Socket.send
+    def send(self, data, flags=0, copy: bint = True, track: bint = False):
+    ^^^^^^^^^^^
+  File "zmq/backend/cython/_zmq.py", line 1194, in zmq.backend.cython._zmq.Socket.send
+    _check_closed(self)
+    ^^^^^^^^^^^
+  File "zmq/backend/cython/_zmq.py", line 1339, in zmq.backend.cython._zmq._check_closed
+    raise ZMQError(ENOTSOCK)
+    ^^^^^^^^^^^
+zmq.error.ZMQError: Socket operation on non-socket
+^CTraceback (most recent call last):
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 657, in async_setup_kernel
+    raise e
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 654, in async_setup_kernel
+    yield
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 709, in async_execute
+    await self.async_execute_cell(
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 1009, in async_execute_cell
+    raise DeadKernelError("Kernel died") from None
+nbclient.exceptions.DeadKernelError: Kernel died
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/scratch/omazor/bench_research_ml_project/.venv/bin/jupyter-execute", line 10, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+    super().launch_instance(argv=argv, **kwargs)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/traitlets/config/application.py", line 1074, in launch_instance
+    app.initialize(argv)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/traitlets/config/application.py", line 118, in inner
+    return method(app, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/cli.py", line 161, in initialize
+    self.run_notebook(path)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/cli.py", line 215, in run_notebook
+    client.execute()
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/omazor/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 693, in async_execute
+    async with self.async_setup_kernel(**kwargs):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/omazor/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py", line 231, in __aexit__
+    await self.gen.athrow(value)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 660, in async_setup_kernel
+    await self._async_cleanup_kernel()
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 504, in _async_cleanup_kernel
+    assert self.km is not None
+           ^^^^^^^^^^^^^^^^^^^
+AssertionError
+(bench_research_ml_project) omazor@epyc4:/scratch/omazor/bench_research_ml_project$ git pull
+remote: Enumerating objects: 33, done.
+remote: Counting objects: 100% (33/33), done.
+remote: Compressing objects: 100% (2/2), done.
+remote: Total 17 (delta 15), reused 17 (delta 15), pack-reused 0 (from 0)
+Unpacking objects: 100% (17/17), 5.03 KiB | 4.00 KiB/s, done.
+From github.com:oremaz/bench_research_ml_project
+   1063d2b96..a89e52db9  main       -> origin/main
+Updating 1063d2b96..a89e52db9
+Fast-forward
+ README.md                                                |  2 +-
+ ai_content_detector/notebooks/explainable_detector.ipynb | 23 ++++++++++++++++++++++-
+ ml_pipeline/README.md                                    |  5 +++--
+ ml_pipeline/bench-aitextdetect.ipynb                     | 30 ++++++++++++++++++++++--------
+ ml_pipeline/bench-food.ipynb                             | 25 +++++++++++++++++++------
+ ml_pipeline/bench-imai-artifact.ipynb                    | 87 +++++++++++++++++++++++++++++++++++++++++++++++++++------------------------------------
+ ml_pipeline/bench-imai.ipynb                             | 31 +++++++++++++++++++++++--------
+ ml_pipeline/bench_ssl.ipynb                              | 47 +++++++++++++++++++++++++++++------------------
+ ml_pipeline/tests/test_checkpoint.py                     | 46 ++++++++++++++++++++++++++++++++++++++++++++--
+ ml_pipeline/utils/utils.py                               | 42 +++++++++++++++++++++++++++++++++++-------
+ 10 files changed, 249 insertions(+), 89 deletions(-)
+(bench_research_ml_project) omazor@epyc4:/scratch/omazor/bench_research_ml_project$ jupyter execute ml_pipeline/bench-imai-artifact.ipynb
+[NbClientApp] Executing ml_pipeline/bench-imai-artifact.ipynb
+[NbClientApp] Executing notebook with kernel: python3
+Traceback (most recent call last):
+  File "/scratch/omazor/bench_research_ml_project/.venv/bin/jupyter-execute", line 10, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+    super().launch_instance(argv=argv, **kwargs)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/traitlets/config/application.py", line 1074, in launch_instance
+    app.initialize(argv)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/traitlets/config/application.py", line 118, in inner
+    return method(app, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/cli.py", line 161, in initialize
+    self.run_notebook(path)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/cli.py", line 215, in run_notebook
+    client.execute()
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/omazor/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 709, in async_execute
+    await self.async_execute_cell(
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+IMG_SIZE = 200
+IMAGENET_MEAN = (0.485, 0.456, 0.406)
+IMAGENET_STD = (0.229, 0.224, 0.225)
+
+transform = transforms.Compose([
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.ToTensor(),
+    transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+])
+
+def is_imagefolder_dir(path: Path) -> bool:
+    path = Path(path)
+    if not path.is_dir():
+        return False
+    subdirs = [p for p in path.iterdir() if p.is_dir()]
+    if len(subdirs) < 2:
+        return False
+    return any(any(child.is_file() for child in d.iterdir()) for d in subdirs)
+
+def find_imagefolder_split(base_dir: Path) -> Path:
+    base_dir = Path(base_dir)
+    if is_imagefolder_dir(base_dir):
+        return base_dir
+    preferred = ("train", "test", "validation", "val", "eval")
+    for name in preferred:
+        for variant in {name, name.upper(), name.capitalize()}:
+            candidate = base_dir / variant
+            if is_imagefolder_dir(candidate):
+                return candidate
+    for candidate in sorted(base_dir.rglob("*")):
+        if is_imagefolder_dir(candidate):
+            return candidate
+    raise ValueError(f"Could not locate an ImageFolder split inside {base_dir}")
+
+train_split = find_imagefolder_split(DATA_DIR)
+print(f"Using ArtiFact data from: {train_split}")
+
+train_ds = datasets.ImageFolder(train_split, transform=transform)
+
+class_names = train_ds.classes
+num_classes = len(class_names)
+print(f"Classes: {class_names}")
+print(f"Total samples: {len(train_ds)}")
+------------------
+
+
+---------------------------------------------------------------------------
+ValueError                                Traceback (most recent call last)
+Cell In[5], line 35
+     32             return candidate
+     33     raise ValueError(f"Could not locate an ImageFolder split inside {base_dir}")
+---> 35 train_split = find_imagefolder_split(DATA_DIR)
+     36 print(f"Using ArtiFact data from: {train_split}")
+     38 train_ds = datasets.ImageFolder(train_split, transform=transform)
+
+Cell In[5], line 33, in find_imagefolder_split(base_dir)
+     31     if is_imagefolder_dir(candidate):
+     32         return candidate
+---> 33 raise ValueError(f"Could not locate an ImageFolder split inside {base_dir}")
+
+ValueError: Could not locate an ImageFolder split inside data/artifact-real-fake
+
+(bench_research_ml_project) omazor@epyc4:/scratch/omazor/bench_research_ml_project$ jupyter execute ml_pipeline/bench-imai-artifact.ipynb
+[NbClientApp] Executing ml_pipeline/bench-imai-artifact.ipynb
+[NbClientApp] Executing notebook with kernel: python3
+Traceback (most recent call last):
+  File "/scratch/omazor/bench_research_ml_project/.venv/bin/jupyter-execute", line 10, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/jupyter_core/application.py", line 284, in launch_instance
+    super().launch_instance(argv=argv, **kwargs)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/traitlets/config/application.py", line 1074, in launch_instance
+    app.initialize(argv)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/traitlets/config/application.py", line 118, in inner
+    return method(app, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/cli.py", line 161, in initialize
+    self.run_notebook(path)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/cli.py", line 215, in run_notebook
+    client.execute()
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/omazor/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 709, in async_execute
+    await self.async_execute_cell(
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+IMG_SIZE = 200
+IMAGENET_MEAN = (0.485, 0.456, 0.406)
+IMAGENET_STD = (0.229, 0.224, 0.225)
+
+transform = transforms.Compose([
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.ToTensor(),
+    transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+])
+
+from torch.utils.data import Dataset
+from torchvision.datasets.folder import IMG_EXTENSIONS, default_loader
+
+IMAGE_EXTENSIONS = tuple(ext.lower() for ext in IMG_EXTENSIONS)
+
+
+def _norm_name(value: str) -> str:
+    return "".join(ch for ch in str(value).lower() if ch.isalnum())
+
+
+def _has_image_file(path: Path) -> bool:
+    path = Path(path)
+    return any(
+        child.is_file() and child.suffix.lower() in IMAGE_EXTENSIONS
+        for child in path.rglob("*")
+    )
+
+
+def is_imagefolder_dir(path: Path) -> bool:
+    path = Path(path)
+    if not path.is_dir():
+        return False
+    class_dirs = [p for p in path.iterdir() if p.is_dir()]
+    # torchvision ImageFolder accepts recursive files under each class directory.
+    return sum(_has_image_file(class_dir) for class_dir in class_dirs) >= 2
+
+
+def find_imagefolder_split(base_dir: Path) -> Path:
+    base_dir = Path(base_dir)
+    if is_imagefolder_dir(base_dir):
+        return base_dir
+    preferred = ("train", "test", "validation", "val", "eval")
+    for name in preferred:
+        for variant in {name, name.upper(), name.capitalize()}:
+            candidate = base_dir / variant
+            if is_imagefolder_dir(candidate):
+                return candidate
+    for candidate in sorted(p for p in base_dir.rglob("*") if p.is_dir()):
+        if is_imagefolder_dir(candidate):
+            return candidate
+    raise ValueError(f"Could not locate an ImageFolder split inside {base_dir}")
+
+
+REAL_CLASS_MARKERS = {
+    "real", "reals", "true", "truth", "factual", "authentic", "natural",
+}
+FAKE_CLASS_MARKERS = {
+    "fake", "fakes", "false", "artificial", "synthetic", "generated", "ai", "aigenerated",
+}
+
+# Common ArtiFact real source folders and fake generator folders. Folder names are
+# normalized before matching, so e.g. "stable-diffusion" and "stable_diffusion" match.
+REAL_SOURCE_MARKERS = {
+    "afhq", "celebahq", "celeba", "coco", "ffhq", "imagenet", "landscape",
+    "lsun", "metfaces", "places", "places365",
+}
+FAKE_SOURCE_MARKERS = {
+    "biggan", "cyclegan", "dalle", "dalle2", "ddpm", "denoisingdiffusiongan",
+    "gaugan", "generativeinpainting", "glide", "lama", "latentdiffusion",
+    "mat", "palette", "projectedgan", "progan", "sfhq", "stablediffusion",
+    "stargan", "stylegan", "stylegan2", "stylegan3", "tamingtransformer",
+    "vqdiffusion", "vqgan", "wukong",
+}
+
+
+def _binary_label_from_path(image_path: Path, root: Path):
+    parts = [_norm_name(part) for part in image_path.relative_to(root).parts[:-1]]
+    for part in parts:
+        if part in REAL_CLASS_MARKERS:
+            return 1
+        if part in FAKE_CLASS_MARKERS:
+            return 0
+    for part in parts:
+        if part in REAL_SOURCE_MARKERS:
+            return 1
+        if part in FAKE_SOURCE_MARKERS:
+            return 0
+    return None
+
+
+class BinaryImagePathDataset(Dataset):
+    classes = ["fake", "real"]
+    class_to_idx = {"fake": 0, "real": 1}
+
+    def __init__(self, samples, transform=None):
+        self.samples = [(Path(path), int(target)) for path, target in samples]
+        self.targets = [target for _, target in self.samples]
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, index):
+        path, target = self.samples[index]
+        image = default_loader(path)
+        if self.transform is not None:
+            image = self.transform(image)
+        return image, target
+
+
+def _is_binary_imagefolder(classes) -> bool:
+    normalized = {_norm_name(name) for name in classes}
+    has_real = bool(normalized & (REAL_CLASS_MARKERS | REAL_SOURCE_MARKERS))
+    has_fake = bool(normalized & (FAKE_CLASS_MARKERS | FAKE_SOURCE_MARKERS))
+    return len(classes) == 2 and has_real and has_fake
+
+
+def build_binary_image_dataset(base_dir: Path, transform=None) -> BinaryImagePathDataset:
+    base_dir = Path(base_dir)
+    image_files = sorted(
+        p for p in base_dir.rglob("*")
+        if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
+    )
+    samples = []
+    skipped = 0
+    for image_path in image_files:
+        label = _binary_label_from_path(image_path, base_dir)
+        if label is None:
+            skipped += 1
+            continue
+        samples.append((image_path, label))
+
+    labels = {target for _, target in samples}
+    if labels != {0, 1}:
+        preview_dirs = [str(p.relative_to(base_dir)) for p in sorted(base_dir.iterdir())[:20]] if base_dir.exists() else []
+        raise ValueError(
+            f"Could not infer both fake and real ArtiFact labels inside {base_dir}. "
+            f"Found {len(samples)} labelled images across labels {sorted(labels)}; "
+            f"skipped {skipped}. Top-level entries: {preview_dirs}"
+        )
+    if skipped:
+        print(f"Skipped {skipped:,} images whose ArtiFact label could not be inferred from the path")
+    return BinaryImagePathDataset(samples, transform=transform)
+
+
+def load_binary_image_dataset(base_dir: Path, transform=None):
+    base_dir = Path(base_dir)
+    try:
+        split = find_imagefolder_split(base_dir)
+        imagefolder = datasets.ImageFolder(split, transform=transform)
+        if _is_binary_imagefolder(imagefolder.classes):
+            return imagefolder, split
+        print(
+            f"Found ImageFolder-like directory at {split}, but classes are {imagefolder.classes}; "
+            "building binary fake/real labels from ArtiFact path names instead."
+        )
+    except ValueError:
+        pass
+
+    dataset = build_binary_image_dataset(base_dir, transform=transform)
+    return dataset, base_dir
+
+
+train_ds, train_split = load_binary_image_dataset(DATA_DIR, transform=transform)
+print(f"Using ArtiFact data from: {train_split}")
+
+class_names = train_ds.classes
+num_classes = len(class_names)
+print(f"Classes: {class_names}")
+print(f"Total samples: {len(train_ds)}")
+
+------------------
+
+
+---------------------------------------------------------------------------
+ValueError                                Traceback (most recent call last)
+Cell In[5], line 164
+    160     dataset = build_binary_image_dataset(base_dir, transform=transform)
+    161     return dataset, base_dir
+--> 164 train_ds, train_split = load_binary_image_dataset(DATA_DIR, transform=transform)
+    165 print(f"Using ArtiFact data from: {train_split}")
+    167 class_names = train_ds.classes
+
+Cell In[5], line 160, in load_binary_image_dataset(base_dir, transform)
+    157 except ValueError:
+    158     pass
+--> 160 dataset = build_binary_image_dataset(base_dir, transform=transform)
+    161 return dataset, base_dir
+
+Cell In[5], line 136, in build_binary_image_dataset(base_dir, transform)
+    134 if labels != {0, 1}:
+    135     preview_dirs = [str(p.relative_to(base_dir)) for p in sorted(base_dir.iterdir())[:20]] if base_dir.exists() else []
+--> 136     raise ValueError(
+    137         f"Could not infer both fake and real ArtiFact labels inside {base_dir}. "
+    138         f"Found {len(samples)} labelled images across labels {sorted(labels)}; "
+    139         f"skipped {skipped}. Top-level entries: {preview_dirs}"
+    140     )
+    141 if skipped:
+    142     print(f"Skipped {skipped:,} images whose ArtiFact label could not be inferred from the path")
+
+ValueError: Could not infer both fake and real ArtiFact labels inside data/artifact-real-fake. Found 0 labelled images across labels []; skipped 0. Top-level entries: ['artifact-dataset.zip'
+]
+
+(bench_research_ml_project) omazor@epyc4:/scratch/omazor/bench_research_ml_project$ papermill ml_pipeline/bench-imai-artifact.ipynb ml_pipeline/bench-imai-artifact.executed.ipynb
+Input Notebook:  ml_pipeline/bench-imai-artifact.ipynb
+Output Notebook: ml_pipeline/bench-imai-artifact.executed.ipynb
+Executing:   0%|                                                                                                                                                     | 0/22 [00:00<?, ?cell/s]
+Executing notebook with kernel: python3
+Executing:  27%|██████████████████████████████████████▍                                                                                                      | 6/22 [01:09<03:04, 11.56s/cell]
+Traceback (most recent call last):
+  File "/scratch/omazor/bench_research_ml_project/.venv/bin/papermill", line 10, in <module>
+    sys.exit(papermill())
+             ^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/click/core.py", line 1485, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/click/core.py", line 1406, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/click/core.py", line 1269, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/click/core.py", line 824, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/click/decorators.py", line 34, in new_func
+    return f(get_current_context(), *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/papermill/cli.py", line 235, in papermill
+    execute_notebook(
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/papermill/execute.py", line 131, in execute_notebook
+    raise_for_execution_errors(nb, output_path)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/papermill/execute.py", line 251, in raise_for_execution_errors
+    raise error
+papermill.exceptions.PapermillExecutionError:
+---------------------------------------------------------------------------
+Exception encountered at "In [3]":
+---------------------------------------------------------------------------
+RuntimeError                              Traceback (most recent call last)
+Cell In[3], line 8
+      6 import torch
+      7 from torch.utils.data import DataLoader
+----> 8 from torchvision import datasets, transforms
+      9 from sklearn.model_selection import train_test_split
+     10 from pipelines_torch.benchmark import BenchmarkRunner
+
+File /scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/torchvision/__init__.py:10
+      7 # Don't re-order these, we need to load the _C extension (done when importing
+      8 # .extensions) before entering _meta_registrations.
+      9 from .extension import _HAS_OPS  # usort:skip
+---> 10 from torchvision import _meta_registrations, datasets, io, models, ops, transforms, utils  # usort:skip
+     12 try:
+     13     from .version import __version__  # noqa: F401
+
+File /scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/torchvision/_meta_registrations.py:163
+    153     torch._check(
+    154         grad.dtype == rois.dtype,
+    155         lambda: (
+   (...)    158         ),
+    159     )
+    160     return grad.new_empty((batch_size, channels, height, width))
+--> 163 @torch.library.register_fake("torchvision::nms")
+    164 def meta_nms(dets, scores, iou_threshold):
+    165     torch._check(dets.dim() == 2, lambda: f"boxes should be a 2d tensor, got {dets.dim()}D")
+    166     torch._check(dets.size(1) == 4, lambda: f"boxes should have 4 elements in dimension 1, got {dets.size(1)}")
+
+File /scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/torch/library.py:1085, in register_fake.<locals>.register(func)
+   1083 else:
+   1084     use_lib = lib
+-> 1085 use_lib._register_fake(
+   1086     op_name, func, _stacklevel=stacklevel + 1, allow_override=allow_override
+   1087 )
+   1088 return func
+
+File /scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/torch/library.py:202, in Library._register_fake(self, op_name, fn, _stacklevel, allow_override)
+    199 else:
+    200     func_to_register = fn
+--> 202 handle = entry.fake_impl.register(
+    203     func_to_register, source, lib=self, allow_override=allow_override
+    204 )
+    205 self._registration_handles.append(handle)
+
+File /scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/torch/_library/fake_impl.py:50, in FakeImplHolder.register(self, func, source, lib, allow_override)
+     44 if self.kernel is not None:
+     45     raise RuntimeError(
+     46         f"register_fake(...): the operator {self.qualname} "
+     47         f"already has an fake impl registered at "
+     48         f"{self.kernel.source}."
+     49     )
+---> 50 if torch._C._dispatch_has_kernel_for_dispatch_key(self.qualname, "Meta"):
+     51     raise RuntimeError(
+     52         f"register_fake(...): the operator {self.qualname} "
+     53         f"already has an DispatchKey::Meta implementation via a "
+   (...)     56         f"register_fake."
+     57     )
+     59 if torch._C._dispatch_has_kernel_for_dispatch_key(
+     60     self.qualname, "CompositeImplicitAutograd"
+     61 ):
+
+RuntimeError: operator torchvision::nms does not exist
+
+(bench_research_ml_project) omazor@epyc4:/scratch/omazor/bench_research_ml_project$ papermill ml_pipeline/bench-imai-artifact.ipynb ml_pipeline/bench-imai-artifact.executed.ipynb
+Input Notebook:  ml_pipeline/bench-imai-artifact.ipynb
+Output Notebook: ml_pipeline/bench-imai-artifact.executed.ipynb
+Executing:   0%|                                                                                                                                                     | 0/22 [00:00<?, ?cell/s]
+Executing notebook with kernel: python3
+Executing:  36%|███████████████████████████████████████████████████▎                                                                                         | 8/22 [02:26<04:16, 18.29s/cell]
+Traceback (most recent call last):
+  File "/scratch/omazor/bench_research_ml_project/.venv/bin/papermill", line 10, in <module>
+    sys.exit(papermill())
+             ^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/click/core.py", line 1485, in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/click/core.py", line 1406, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/click/core.py", line 1269, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/click/core.py", line 824, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/click/decorators.py", line 34, in new_func
+    return f(get_current_context(), *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/papermill/cli.py", line 235, in papermill
+    execute_notebook(
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/papermill/execute.py", line 131, in execute_notebook
+    raise_for_execution_errors(nb, output_path)
+  File "/scratch/omazor/bench_research_ml_project/.venv/lib/python3.12/site-packages/papermill/execute.py", line 251, in raise_for_execution_errors
+    raise error
+papermill.exceptions.PapermillExecutionError:
+---------------------------------------------------------------------------
+Exception encountered at "In [4]":
+---------------------------------------------------------------------------
+BadZipFile                                Traceback (most recent call last)
+Cell In[4], line 6
+      3 from utils.kaggle_utils import ensure_kaggle_dataset
+      5 KAGGLE_ARTIFACT = "awsaf49/artifact-dataset"
+----> 6 DATA_DIR = ensure_kaggle_dataset(
+      7     dataset_slug=KAGGLE_ARTIFACT,
+      8     local_dir=Path("data/artifact-real-fake"),
+      9     description="ArtiFact dataset",
+     10     kaggle_subdir="artifact-dataset",
+     11 )
+     13 if DATA_DIR.exists():
+     14     print(f"✅ ArtiFact data available at {DATA_DIR}")
+
+File /scratch/omazor/bench_research_ml_project/ml_pipeline/utils/kaggle_utils.py:104, in ensure_kaggle_dataset(dataset_slug, local_dir, description, kaggle_subdir)
+    101         print(f"✅ Using Kaggle input for {description} at {kaggle_input}")
+    102         return kaggle_input
+--> 104 _extract_archives_if_needed(local_path)
+    105 if _has_data(local_path):
+    106     print(f"ℹ️ {description} already present at {local_path}")
+
+File /scratch/omazor/bench_research_ml_project/ml_pipeline/utils/kaggle_utils.py:55, in _extract_archives_if_needed(directory)
+     50 archives = sorted(
+     51     entry for entry in directory.iterdir()
+     52     if entry.is_file() and entry.suffix.lower() in _ARCHIVE_SUFFIXES
+     53 )
+     54 for archive in archives:
+---> 55     _safe_extract_zip(archive, directory)
+     56     print(f"✅ Extracted {archive.name} in {directory}")
+
+File /scratch/omazor/bench_research_ml_project/ml_pipeline/utils/kaggle_utils.py:38, in _safe_extract_zip(zip_path, destination)
+     36 def _safe_extract_zip(zip_path: Path, destination: Path) -> None:
+     37     destination = destination.resolve()
+---> 38     with zipfile.ZipFile(zip_path) as archive:
+     39         for member in archive.infolist():
+     40             target = (destination / member.filename).resolve()
+
+File ~/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/zipfile/__init__.py:1370, in ZipFile.__init__(self, file, mode, compression, allowZip64, compresslevel, strict_t
+imestamps, metadata_encoding)
+   1368 try:
+   1369     if mode == 'r':
+-> 1370         self._RealGetContents()
+   1371     elif mode in ('w', 'x'):
+   1372         # set the modified flag so central directory gets written
+   1373         # even if no files are added to the archive
+   1374         self._didModify = True
+
+File ~/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/zipfile/__init__.py:1437, in ZipFile._RealGetContents(self)
+   1435     raise BadZipFile("File is not a zip file")
+   1436 if not endrec:
+-> 1437     raise BadZipFile("File is not a zip file")
+   1438 if self.debug > 1:
+   1439     print(endrec)
+
+BadZipFile: File is not a zip file
+
+(bench_research_ml_project) omazor@epyc4:/scratch/omazor/bench_research_ml_project$ tmux capture-pane -p -S -3000 > tmux_logs.txt
+

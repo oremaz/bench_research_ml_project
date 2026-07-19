@@ -107,6 +107,21 @@ def display_analysis_results(analysis: dict):
         else:
             st.write(f"{time_class.get('prediction', 'Unknown')}: {time_class.get('confidence', 0):.1%}")
 
+    nutrients = analysis.get("nutrients", {})
+    per_serving = nutrients.get("per_serving")
+    if per_serving:
+        st.markdown("### Estimated Nutrition (per serving)")
+        cols = st.columns(4)
+        units = {"kcal": "kcal"}
+        for i, (target, value) in enumerate(per_serving.items()):
+            unit = units.get(target, "g")
+            cols[i % 4].metric(target.capitalize(), f"{value:g} {unit}")
+        st.caption(
+            "Ballpark estimate from the recipe text (typical calorie error "
+            "30-50% per serving). Good for comparing recipes, not for "
+            "precise tracking."
+        )
+
 
 def main():
     st.title("Smart Recipe Lab")

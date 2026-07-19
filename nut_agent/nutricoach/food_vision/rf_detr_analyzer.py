@@ -64,16 +64,20 @@ class RFDETRAnalyzer(FoodAnalyzer):
         model_path: Optional[str] = None,
         confidence_threshold: float = 0.3,
         model_size: str = "base",
+        num_classes: Optional[int] = None,
     ):
         """
         Args:
             model_path: Path to fine-tuned weights. None = use COCO pretrained.
             confidence_threshold: Minimum detection confidence.
             model_size: 'base' or 'large' for RF-DETR variant.
+            num_classes: Class count of a fine-tuned checkpoint (e.g. 103 for
+                FoodSeg103); without it the detection head is re-initialized.
         """
         self.model_path = model_path
         self.confidence_threshold = confidence_threshold
         self.model_size = model_size
+        self.num_classes = num_classes
         self.nutrition_db = NutritionDB()
         self._model = None
 
@@ -93,7 +97,8 @@ class RFDETRAnalyzer(FoodAnalyzer):
         ModelClass = RFDETRLarge if self.model_size == "large" else RFDETRBase
 
         if self.model_path and Path(self.model_path).exists():
-            self._model = ModelClass(pretrain_weights=self.model_path)
+            kwargs = {"num_classes": self.num_classes} if self.num_classes else {}
+            self._model = ModelClass(pretrain_weights=self.model_path, **kwargs)
             logger.info("Loaded fine-tuned RF-DETR from %s", self.model_path)
         else:
             self._model = ModelClass()
@@ -143,6 +148,10 @@ class RFDETRAnalyzer(FoodAnalyzer):
 
         # If fine-tuned, class names come from the model's config
         has_custom_names = hasattr(detections, 'data') and 'class_name' in getattr(detections, 'data', {})
+        # With COCO weights every class name is exposed, so restrict to food classes;
+        # a fine-tuned food model only emits food classes and needs no whitelist.
+        is_finetuned = bool(self.model_path and Path(self.model_path).exists())
+        coco_food_names = set(coco_food_classes.values())
 
         xyxy = detections.xyxy if hasattr(detections, 'xyxy') else []
         class_ids = detections.class_id if hasattr(detections, 'class_id') else []
@@ -156,6 +165,8 @@ class RFDETRAnalyzer(FoodAnalyzer):
             # Get food name
             if has_custom_names:
                 name = detections.data['class_name'][i]
+                if not is_finetuned and name not in coco_food_names:
+                    continue
             elif class_id in coco_food_classes:
                 name = coco_food_classes[class_id]
             else:

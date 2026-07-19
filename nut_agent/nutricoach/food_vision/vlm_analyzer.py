@@ -27,6 +27,7 @@ from .base import (
     encode_image_to_base64,
     get_image_media_type,
 )
+from shared.config import OPENROUTER_VISION_MODEL, OPENROUTER_VISION_FALLBACKS
 
 logger = logging.getLogger(__name__)
 
@@ -101,11 +102,11 @@ class VLMAnalyzer(FoodAnalyzer):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "anthropic/claude-opus-4-6",
+        model: str = None,
         base_url: str = "https://openrouter.ai/api/v1",
     ):
         self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
-        self.model = model
+        self.model = model or OPENROUTER_VISION_MODEL
         self.base_url = base_url
         self._client = None
 
@@ -129,6 +130,7 @@ class VLMAnalyzer(FoodAnalyzer):
             messages=messages,
             max_tokens=max_tokens,
             temperature=0.1,
+            extra_body={"models": OPENROUTER_VISION_FALLBACKS},
         )
         return response.choices[0].message.content.strip()
 
@@ -268,9 +270,9 @@ For each food item visible:
 3. Calculate calories, protein (g), carbs (g), and fat (g)
 
 Return ONLY a JSON object:
-{{
+{
   "items": [
-    {{
+    {
       "name": "food name",
       "quantity_grams": 180,
       "portion_description": "1 medium serving",
@@ -279,20 +281,20 @@ Return ONLY a JSON object:
       "protein_g": 30.0,
       "carbs_g": 5.0,
       "fat_g": 12.0
-    }}
+    }
   ]
-}}
+}
 
 Be thorough — include sauces, condiments, garnishes, drinks. Use standard nutrition values."""
 
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "anthropic/claude-opus-4-6",
+        model: str = None,
         base_url: str = "https://openrouter.ai/api/v1",
     ):
         self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
-        self.model = model
+        self.model = model or OPENROUTER_VISION_MODEL
         self.base_url = base_url
         self._client = None
 
@@ -325,6 +327,7 @@ Be thorough — include sauces, condiments, garnishes, drinks. Use standard nutr
                 }],
                 max_tokens=2000,
                 temperature=0.1,
+                extra_body={"models": OPENROUTER_VISION_FALLBACKS},
             )
 
             raw = response.choices[0].message.content.strip()

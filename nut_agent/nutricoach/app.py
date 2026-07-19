@@ -144,7 +144,12 @@ def _ensure_memory_migrated(username):
 def init_agent():
     if st.session_state["agent_graph"] is not None:
         return True
-    api_key = st.text_input("Google API Key", type="password", value=os.environ.get("GOOGLE_API_KEY", ""))
+    env_key = os.environ.get("GOOGLE_API_KEY", "") or os.environ.get("OPENROUTER_API_KEY", "")
+    api_key = st.text_input(
+        "API Key (Google or OpenRouter sk-or-...)",
+        type="password",
+        value=env_key,
+    )
     if api_key:
         st.session_state["api_key"] = api_key
         username = st.session_state.get("username", "anonymous")
@@ -156,7 +161,7 @@ def init_agent():
             st.error(f"Failed to initialize agent: {e}")
             return False
     else:
-        st.warning("Please enter your Google API key.")
+        st.warning("Please enter a Google or OpenRouter API key.")
         return False
 
 
@@ -312,16 +317,25 @@ def display_quick_actions():
         if st.button("Plan Today's Meals", use_container_width=True):
             if st.session_state["agent_graph"]:
                 send_message("Please create a meal plan for today based on my profile and any constraints I mentioned.")
+        if st.button("What Can I Still Eat Today?", use_container_width=True):
+            if st.session_state["agent_graph"]:
+                send_message("What do I have left in my nutrition budget today? Suggest a meal or snack that fits.")
 
     with col2:
         if st.button("Calculate Nutrition Targets", use_container_width=True):
             if st.session_state["agent_graph"]:
                 send_message("Please calculate my daily nutrition targets based on my profile.")
+        if st.button("Grocery List From My Plan", use_container_width=True):
+            if st.session_state["agent_graph"]:
+                send_message("Build a grocery list from my meal plan for this week, grouped by store section.")
 
     with col3:
         if st.button("Check My Progress", use_container_width=True):
             if st.session_state["agent_graph"]:
                 send_message("How have I been doing this week? Please analyze my recent progress.")
+        if st.button("Weekly Summary", use_container_width=True):
+            if st.session_state["agent_graph"]:
+                send_message("Generate my weekly summary and tell me what to improve next week.")
 
 
 # --- Daily Results Tracker ---

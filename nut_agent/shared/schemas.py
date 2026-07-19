@@ -102,6 +102,14 @@ class WeeklySummary(BaseModel):
     ai_notes: str = ""
 
 
+class MealPlan(BaseModel):
+    """A weekly meal plan agreed with the agent."""
+    week_id: str  # YYYY-Wnn format
+    plan_text: str
+    created_at: str = ""
+    notes: str = ""
+
+
 class ConversationEntry(BaseModel):
     """Index entry for significant conversation decisions."""
     timestamp: str

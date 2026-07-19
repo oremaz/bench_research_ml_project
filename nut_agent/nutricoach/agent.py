@@ -10,6 +10,7 @@ Changes from v1 (based on feedback):
 
 import os
 import sqlite3
+import time
 from typing import Annotated, Any, Optional
 
 from typing_extensions import TypedDict
@@ -21,7 +22,13 @@ from langgraph.prebuilt import ToolNode
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
-from shared.config import GEMINI_MODEL, SECRETS_DIR
+from shared.config import (
+    GEMINI_MODEL,
+    SECRETS_DIR,
+    OPENROUTER_BASE_URL,
+    OPENROUTER_AGENT_MODEL,
+    OPENROUTER_AGENT_FALLBACKS,
+)
 from shared.memory import MemoryManager
 from nutricoach.tools import ALL_TOOLS, set_current_user
 
@@ -42,12 +49,22 @@ Your role is to help users with their nutrition goals through:
 
 Guidelines:
 - Use the available tools to perform calculations and log data — do NOT perform math yourself.
+- NEVER claim you logged or calculated something unless you actually called the tool
+  in this conversation. If a tool call failed, say so.
+- The USER CONTEXT section below already contains the user's profile, targets, and
+  today's log when they exist; read it before asking the user for information.
 - Be encouraging but honest about progress.
 - Base recommendations on the user's profile and goals from context.
-- When the user reports what they ate, use the log_daily_intake tool.
+- When the user reports what they ate, use the log_daily_intake tool and include your
+  calorie/macro estimates for the meal (use lookup_food_nutrition for grounded values).
+- When the user reports drinking water, use log_water_intake.
+- For "what can I still eat today?" questions, use get_remaining_daily_budget.
 - When asked about progress or trends, use the get_progress_summary tool.
+- For an end-of-week review, use generate_weekly_summary.
 - When nutrition targets are needed, use calculate_personalized_nutrition_targets.
 - When the user shares a food photo, use the analyze_food_image tool.
+- After the user accepts a meal plan, save it with save_meal_plan. Use get_meal_plan
+  to check today's planned meals or to build a grocery list from the plan.
 - Keep responses concise and actionable.
 """
 
@@ -66,29 +83,66 @@ def _get_checkpointer(username: str):
         return None
 
 
+def _make_llm(api_key: Optional[str]):
+    """
+    Pick the LLM provider from the supplied key or environment.
+    Google Gemini when a Google key is available; otherwise OpenRouter
+    (free-tier default model, override with OPENROUTER_AGENT_MODEL).
+    """
+    google_key = None
+    openrouter_key = os.environ.get("OPENROUTER_API_KEY")
+
+    if api_key and api_key.startswith("sk-or-"):
+        openrouter_key = api_key
+    elif api_key:
+        google_key = api_key
+    else:
+        google_key = os.environ.get("GOOGLE_API_KEY")
+
+    if google_key:
+        os.environ["GOOGLE_API_KEY"] = google_key
+        return ChatGoogleGenerativeAI(model=GEMINI_MODEL)
+
+    if openrouter_key:
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=OPENROUTER_AGENT_MODEL,
+            base_url=OPENROUTER_BASE_URL,
+            api_key=openrouter_key,
+            temperature=0.2,
+            max_retries=3,
+            extra_body={"models": OPENROUTER_AGENT_FALLBACKS},
+        )
+
+    raise ValueError(
+        "No LLM credentials found. Set GOOGLE_API_KEY or OPENROUTER_API_KEY, "
+        "or pass an API key explicitly."
+    )
+
+
 def build_nutricoach_graph(
-    google_api_key: str,
-    username: str,
+    api_key: Optional[str] = None,
+    username: str = "anonymous",
     use_checkpointer: bool = True,
 ) -> Any:
     """
     Build and return the NutriCoach LangGraph agent.
 
     Args:
-        google_api_key: Google API key for Gemini
+        api_key: Google API key for Gemini, or an OpenRouter key (sk-or-...).
+                 None uses GOOGLE_API_KEY / OPENROUTER_API_KEY from the environment.
         username: Current user's username (for memory access)
         use_checkpointer: Whether to use SqliteSaver for persistence
 
     Returns:
         Compiled LangGraph
     """
-    os.environ["GOOGLE_API_KEY"] = google_api_key
-
     # Set user context for tools
     set_current_user(username)
 
     # Initialize LLM with tools bound
-    llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL)
+    llm = _make_llm(api_key)
     llm_with_tools = llm.bind_tools(ALL_TOOLS)
 
     # Memory manager for context assembly
@@ -115,8 +169,32 @@ def build_nutricoach_graph(
         ]
 
         all_messages = [system_msg] + conversation_messages
-        response = llm_with_tools.invoke(all_messages)
-        return {"messages": [response]}
+        # Free-tier providers intermittently return 500/429 in a 200 body,
+        # which the SDK does not retry; retry those here.
+        last_exc = None
+        response = None
+        for attempt in range(3):
+            try:
+                response = llm_with_tools.invoke(all_messages)
+            except Exception as e:
+                msg = str(e).lower()
+                if any(tok in msg for tok in ("500", "429", "rate", "internal server")):
+                    last_exc = e
+                    # free-models-per-min caps need a window-sized backoff
+                    time.sleep(20 * (attempt + 1))
+                    continue
+                raise
+            # Some free-tier models return an empty completion; retry those too.
+            if response.content or getattr(response, "tool_calls", None):
+                return {"messages": [response]}
+            time.sleep(1)
+        if response is not None:
+            if not response.content:
+                response.content = (
+                    "Done. Let me know if you want anything else logged or checked."
+                )
+            return {"messages": [response]}
+        raise last_exc
 
     def should_use_tools(state: NutriCoachState) -> str:
         """Route to tool_node if the LLM wants to call tools, else END."""

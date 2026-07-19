@@ -14,7 +14,9 @@ Four methods are implemented for comparison, from traditional CV to pure LLM.
 - **Install**: `pip install rfdetr supervision`
 
 ### Method 2: Pure vLLM via OpenRouter (`vlm_analyzer.py`)
-- **Architecture**: Claude Opus 4.6 via OpenRouter API
+- **Architecture**: OpenRouter vision model (default is a free-tier model set by
+  `OPENROUTER_VISION_MODEL` in `shared/config.py`, with server-side fallbacks;
+  point it at e.g. `anthropic/claude-opus-4-6` on a paid tier for best quality)
 - **Approach**: 3-step chained prompts: (1) identify foods, (2) estimate portions, (3) compute nutrition
 - **Also includes**: `VLMAnalyzerSingleShot`, a single comprehensive prompt variant (faster, cheaper)
 - **Strengths**: Best food identification (handles complex dishes, mixed meals, sauces); no model training needed
@@ -27,6 +29,26 @@ Four methods are implemented for comparison, from traditional CV to pure LLM.
 - **Strengths**: CLIP runs locally (fast, free); LLM only needed for refinement; good for common foods
 - **Weaknesses**: CLIP single-label classification misses multiple items; LLM refinement still needs API
 - **Install**: `pip install transformers torch openai`
+- **Alternative backend**: `CLIPFoodAnalyzer(backend="jina")` swaps CLIP for
+  `jinaai/jina-embeddings-v5-omni-small` (multimodal embeddings, 1.74B params).
+  Benchmarked below; CLIP remains the default because it is both more accurate
+  and faster on food classification.
+
+#### Zero-shot backend benchmark (Food101)
+
+1000 Food101 validation images, 101 class prompts, cuda:1
+(`ml_pipeline/bench_food_image_zeroshot.py`, results in
+`ml_pipeline/results/bench_food_image_zeroshot.json`, 2026-07):
+
+| Backend | Top-1 | Top-5 | ms / image |
+|---------|-------|-------|------------|
+| CLIP ViT-B/32 (default) | **0.796** | **0.954** | **237** |
+| jina-embeddings-v5-omni-small | 0.743 | 0.918 | 687 |
+
+CLIP's contrastive image-text pretraining is a better fit for prompt-based
+zero-shot classification than a general-purpose retrieval embedder, at a
+third of the latency and 12x fewer parameters. Note jina-v5 is CC BY-NC 4.0
+(non-commercial).
 
 ### Method 4: RAG-Enhanced VLM, DietAI24-inspired (`rag_vlm_analyzer.py`)
 - **Architecture**: Claude Opus via OpenRouter + local nutrition DB retrieval
@@ -73,7 +95,29 @@ User: "Analyze this photo of my lunch" → Agent calls analyze_food_image tool
 
 ## RF-DETR Fine-Tuning Guide
 
-No public food-specific RF-DETR checkpoint exists. To fine-tune:
+No public food-specific RF-DETR checkpoint exists. This repo fine-tunes on
+FoodSeg103 (103 ingredient classes) converted from segmentation masks to COCO
+bounding boxes:
+
+```bash
+# One-shot: download + convert FoodSeg103, then fine-tune on GPU 1
+PYTHONPATH=. uv run python ml_pipeline/prepare_foodseg103_coco.py
+CUDA_VISIBLE_DEVICES=1 PYTHONPATH=. uv run python ml_pipeline/train_rf_detr_food.py
+# Weights land in ml_pipeline/results/rf_detr_food/
+```
+
+Trained 2026-07: 8 epochs on 4983 images reached EMA mAP@50:95 = 0.381
+(mAP@50 = 0.433) on the 500-image validation split. Load with the fine-tuned
+class count so the detection head is not re-initialized:
+
+```python
+analyzer = RFDETRAnalyzer(
+    model_path="ml_pipeline/results/rf_detr_food/checkpoint_best_total.pth",
+    num_classes=103,
+)
+```
+
+Manual alternative:
 
 ```python
 from nutricoach.food_vision.rf_detr_analyzer import RFDETRFoodTrainer

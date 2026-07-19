@@ -25,6 +25,7 @@ from PIL import Image
 
 from .base import FoodAnalyzer, FoodAnalysisResult, FoodItem
 from .nutrition_db import NutritionDB, FOOD_DB
+from shared.config import OPENROUTER_VISION_MODEL, OPENROUTER_VISION_FALLBACKS
 
 logger = logging.getLogger(__name__)
 
@@ -112,9 +113,16 @@ LABEL_TO_DB_KEY = {
 }
 
 
+JINA_EMBED_MODEL = "jinaai/jina-embeddings-v5-omni-small"
+# Cosine similarities from an embedding model need sharpening before softmax;
+# CLIP bakes this in with its learned logit scale (~100).
+JINA_LOGIT_SCALE = 30.0
+
+
 class CLIPFoodAnalyzer(FoodAnalyzer):
     """
-    Hybrid approach: CLIP zero-shot food classification + LLM portion reasoning.
+    Hybrid approach: zero-shot food classification + LLM portion reasoning.
+    Vision backend is either CLIP ViT-B/32 or jina-embeddings-v5-omni-small.
     """
 
     method_name = "clip_ensemble"
@@ -125,16 +133,24 @@ class CLIPFoodAnalyzer(FoodAnalyzer):
         top_k: int = 5,
         confidence_threshold: float = 0.05,
         openrouter_api_key: Optional[str] = None,
-        llm_model: str = "anthropic/claude-opus-4-6",
+        llm_model: str = None,
+        device: Optional[str] = None,
+        backend: str = "clip",
     ):
+        if backend not in ("clip", "jina"):
+            raise ValueError(f"backend must be 'clip' or 'jina', got {backend!r}")
+        self.backend = backend
         self.clip_model_name = clip_model
         self.top_k = top_k
         self.confidence_threshold = confidence_threshold
         self.api_key = openrouter_api_key or os.environ.get("OPENROUTER_API_KEY", "")
-        self.llm_model = llm_model
+        self.llm_model = llm_model or OPENROUTER_VISION_MODEL
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.nutrition_db = NutritionDB()
         self._clip_model = None
         self._clip_processor = None
+        self._jina_model = None
+        self._label_emb = None
 
     def _load_clip(self):
         """Lazy-load CLIP model."""
@@ -144,31 +160,58 @@ class CLIPFoodAnalyzer(FoodAnalyzer):
         from transformers import CLIPProcessor, CLIPModel
 
         self._clip_processor = CLIPProcessor.from_pretrained(self.clip_model_name)
-        self._clip_model = CLIPModel.from_pretrained(self.clip_model_name)
+        self._clip_model = CLIPModel.from_pretrained(self.clip_model_name).to(self.device)
         self._clip_model.eval()
-        logger.info("Loaded CLIP model: %s", self.clip_model_name)
+        logger.info("Loaded CLIP model: %s on %s", self.clip_model_name, self.device)
+
+    def _load_jina(self):
+        """Lazy-load the Jina omni embedding model and cache label embeddings."""
+        if self._jina_model is not None:
+            return
+
+        from sentence_transformers import SentenceTransformer
+
+        self._jina_model = SentenceTransformer(
+            JINA_EMBED_MODEL,
+            trust_remote_code=True,
+            model_kwargs={"default_task": "retrieval"},
+            device=self.device,
+        )
+        prompts = [f"a photo of {label}" for label in FOOD_LABELS]
+        self._label_emb = torch.tensor(
+            self._jina_model.encode_query(prompts, normalize_embeddings=True)
+        )
+        logger.info("Loaded Jina model: %s on %s", JINA_EMBED_MODEL, self.device)
 
     def _classify_food(self, image_path: str) -> List[Tuple[str, float]]:
-        """Run CLIP zero-shot classification and return top-K (label, score) pairs."""
-        self._load_clip()
-
+        """Run zero-shot classification and return top-K (label, score) pairs."""
         image = Image.open(image_path).convert("RGB")
 
-        # Prepare text prompts
-        text_prompts = [f"a photo of {label}" for label in FOOD_LABELS]
-
-        inputs = self._clip_processor(
-            text=text_prompts,
-            images=image,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-        )
-
-        with torch.no_grad():
-            outputs = self._clip_model(**inputs)
-            logits = outputs.logits_per_image[0]
+        if self.backend == "jina":
+            self._load_jina()
+            img_emb = torch.tensor(
+                self._jina_model.encode_document([image], normalize_embeddings=True)
+            )[0]
+            logits = JINA_LOGIT_SCALE * (self._label_emb @ img_emb)
             probs = logits.softmax(dim=-1)
+        else:
+            self._load_clip()
+            text_prompts = [f"a photo of {label}" for label in FOOD_LABELS]
+
+            inputs = self._clip_processor(
+                text=text_prompts,
+                images=image,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+            )
+
+            inputs = {k: v.to(self.device) if hasattr(v, "to") else v for k, v in inputs.items()}
+
+            with torch.no_grad():
+                outputs = self._clip_model(**inputs)
+                logits = outputs.logits_per_image[0]
+                probs = logits.softmax(dim=-1).cpu()
 
         # Get top-K
         top_values, top_indices = probs.topk(self.top_k)
@@ -231,6 +274,7 @@ Return ONLY a JSON array:
                 }],
                 max_tokens=1500,
                 temperature=0.1,
+                extra_body={"models": OPENROUTER_VISION_FALLBACKS},
             )
 
             raw = response.choices[0].message.content.strip()

@@ -34,7 +34,7 @@ source ~/.bash_profile
 ## Testing
 
 ```bash
-# ml_pipeline (70 tests: scoring, wrappers, pipelines, checkpoints, benchmarks)
+# ml_pipeline (73 tests: scoring, wrappers, pipelines, checkpoints, benchmarks)
 cd ml_pipeline && python -m pytest tests/ -v
 
 # nut_agent (86 tests: utils, auth, memory, predictor, intent, agent)

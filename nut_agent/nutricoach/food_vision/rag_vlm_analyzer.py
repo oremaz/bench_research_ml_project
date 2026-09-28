@@ -24,6 +24,8 @@ import os
 import time
 from typing import Dict, List, Optional, Tuple
 
+from shared.config import OPENROUTER_MODEL_ID
+
 from .base import (
     FoodAnalyzer,
     FoodAnalysisResult,
@@ -32,7 +34,6 @@ from .base import (
     get_image_media_type,
 )
 from .nutrition_db import NutritionDB, FOOD_DB, NutrientInfo
-from shared.config import OPENROUTER_VISION_MODEL, OPENROUTER_VISION_FALLBACKS
 
 logger = logging.getLogger(__name__)
 
@@ -69,11 +70,11 @@ class RAGVLMAnalyzer(FoodAnalyzer):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = None,
+        model: str = OPENROUTER_MODEL_ID,
         use_embeddings: bool = False,
     ):
         self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
-        self.model = model or OPENROUTER_VISION_MODEL
+        self.model = model or OPENROUTER_MODEL_ID
         self.use_embeddings = use_embeddings
         self.nutrition_db = NutritionDB()
         self._client = None
@@ -193,7 +194,6 @@ Return ONLY a JSON array of strings: ["item1", "item2", ...]"""
                 }],
                 max_tokens=500,
                 temperature=0.1,
-                extra_body={"models": OPENROUTER_VISION_FALLBACKS},
             )
 
             raw1 = response.choices[0].message.content.strip()
@@ -252,7 +252,6 @@ Return ONLY a JSON array:
                 }],
                 max_tokens=2000,
                 temperature=0.1,
-                extra_body={"models": OPENROUTER_VISION_FALLBACKS},
             )
 
             raw2 = response2.choices[0].message.content.strip()

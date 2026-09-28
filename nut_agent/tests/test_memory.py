@@ -3,6 +3,8 @@
 import sys
 from pathlib import Path
 from datetime import date
+from unittest.mock import patch
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -53,6 +55,15 @@ class TestUserProfile:
     def test_load_nonexistent(self, tmp_path):
         mm = MemoryManager("bob", tmp_path)
         assert mm.load_user_profile() is None
+
+    def test_failed_replace_keeps_previous_profile(self, tmp_path):
+        mm = MemoryManager("alice", tmp_path)
+        mm.save_user_profile(_make_profile(age=25))
+        with patch("shared.memory.os.replace", side_effect=OSError("disk error")):
+            with pytest.raises(OSError):
+                mm.save_user_profile(_make_profile(age=26))
+        assert mm.load_user_profile().age == 25
+        assert not list(mm.user_dir.glob(".user_profile.json.*"))
 
 
 class TestNutritionTargets:

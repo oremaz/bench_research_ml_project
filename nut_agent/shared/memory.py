@@ -5,6 +5,8 @@ Replaces brute-force message replay with bounded, per-user file storage.
 
 import json
 import logging
+import os
+import tempfile
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -289,6 +291,14 @@ class MemoryManager:
 
     def _write_json(self, path: Path, data: Any) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
-            json.dump(data, f, indent=2)
-            f.flush()
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile("w", dir=path.parent, prefix=f".{path.name}.", delete=False) as f:
+                tmp_path = Path(f.name)
+                json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, path)
+        finally:
+            if tmp_path is not None:
+                tmp_path.unlink(missing_ok=True)

@@ -2,7 +2,6 @@
 Configuration file for the nutritionist agent.
 """
 
-import os
 from pathlib import Path
 
 # Paths
@@ -92,25 +91,8 @@ MACRO_RATIOS = {
 WATER_ML_PER_KG = 35  # ml per kg body weight
 
 # LLM configurations
-GEMINI_MODEL = "gemini-2.0-flash"
+OPENROUTER_MODEL_ID = "stealth/space-bunny-alpha"
 MAX_RECURSION_LIMIT = 50
-
-# OpenRouter fallback (used when GOOGLE_API_KEY is not configured).
-# Defaults are free-tier models; override via env for paid tiers.
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-OPENROUTER_AGENT_MODEL = os.environ.get("OPENROUTER_AGENT_MODEL", "google/gemma-4-31b-it:free")
-OPENROUTER_VISION_MODEL = os.environ.get("OPENROUTER_VISION_MODEL", "google/gemma-4-31b-it:free")
-# Server-side fallbacks when the primary free model is rate-limited upstream.
-# All support tool calling; the vision list additionally supports images.
-OPENROUTER_AGENT_FALLBACKS = [
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "qwen/qwen3-next-80b-a3b-instruct:free",
-    "google/gemma-4-26b-a4b-it:free",
-]
-OPENROUTER_VISION_FALLBACKS = [
-    "google/gemma-4-26b-a4b-it:free",
-    "nvidia/nemotron-nano-12b-v2-vl:free",
-]
 
 # Streamlit configurations
 STREAMLIT_CONFIG = {
@@ -191,7 +173,7 @@ PROMPTS = {
 # Error messages
 ERROR_MESSAGES = {
     'model_not_loaded': "Model not loaded. Please check model files.",
-    'api_key_missing': "Google API key is required.",
+    'api_key_missing': "OpenRouter API key is required.",
     'profile_incomplete': "Please complete your profile setup first.",
     'invalid_input': "Invalid input provided. Please try again.",
     'prediction_failed': "Failed to make prediction. Using default values."

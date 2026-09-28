@@ -23,18 +23,17 @@ from nutricoach.tools import (
     get_meal_plan,
     generate_weekly_summary,
     ALL_TOOLS,
-    set_current_user,
 )
 from shared.memory import MemoryManager
 from shared.schemas import DailyLog, MealEntry
+
+USER_CONFIG = {"configurable": {"username": "tooluser"}}
 
 
 @pytest.fixture
 def user_env(tmp_path, monkeypatch):
     monkeypatch.setattr(tools_mod, "SECRETS_DIR", tmp_path)
-    set_current_user("tooluser")
     yield tmp_path
-    set_current_user(None)
 
 
 def _memory(tmp_path):
@@ -58,14 +57,14 @@ class TestLogDailyIntakeTotals:
         r1 = log_daily_intake.func(
             "oatmeal with berries", meal_type="breakfast",
             estimated_calories=350, estimated_protein_g=12.0,
-            estimated_carbs_g=60.0, estimated_fat_g=7.0,
+            estimated_carbs_g=60.0, estimated_fat_g=7.0, config=USER_CONFIG,
         )
         assert r1["logged"] and r1["total_calories_today"] == 350
 
         r2 = log_daily_intake.func(
             "chicken salad", meal_type="lunch",
             estimated_calories=450, estimated_protein_g=40.0,
-            estimated_carbs_g=15.0, estimated_fat_g=25.0,
+            estimated_carbs_g=15.0, estimated_fat_g=25.0, config=USER_CONFIG,
         )
         assert r2["total_calories_today"] == 800
 
@@ -75,24 +74,24 @@ class TestLogDailyIntakeTotals:
         assert len(log.meals) == 2
 
     def test_totals_none_without_estimates(self, user_env):
-        log_daily_intake.func("some unspecified meal")
+        log_daily_intake.func("some unspecified meal", config=USER_CONFIG)
         log = _memory(user_env).load_todays_log()
         assert log.total_calories is None
 
 
 class TestWaterIntake:
     def test_accumulates(self, user_env):
-        r1 = log_water_intake.func(250)
-        r2 = log_water_intake.func(500)
+        r1 = log_water_intake.func(250, config=USER_CONFIG)
+        r2 = log_water_intake.func(500, config=USER_CONFIG)
         assert r1["water_today_ml"] == 250
         assert r2["water_today_ml"] == 750
 
     def test_reports_remaining_when_targets_exist(self, user_env):
         calculate_personalized_nutrition_targets.func(
             weight_kg=70, height_cm=175, age=30, gender="male",
-            activity_level="moderate", weight_goal="maintain",
+            activity_level="moderate", weight_goal="maintain", config=USER_CONFIG,
         )
-        r = log_water_intake.func(1000)
+        r = log_water_intake.func(1000, config=USER_CONFIG)
         assert r["target_water_ml"] == 70 * 35
         assert r["remaining_ml"] == 70 * 35 - 1000
 
@@ -115,21 +114,22 @@ class TestLookupFoodNutrition:
 
 class TestRemainingBudget:
     def test_requires_targets(self, user_env):
-        r = get_remaining_daily_budget.func()
+        r = get_remaining_daily_budget.func(config=USER_CONFIG)
         assert "error" in r
 
     def test_computes_remaining(self, user_env):
         calculate_personalized_nutrition_targets.func(
             weight_kg=80, height_cm=180, age=30, gender="male",
-            activity_level="moderate", weight_goal="lose",
+            activity_level="moderate", weight_goal="lose", config=USER_CONFIG,
         )
         log_daily_intake.func(
             "big breakfast", estimated_calories=600,
             estimated_protein_g=30.0, estimated_carbs_g=70.0, estimated_fat_g=20.0,
+            config=USER_CONFIG,
         )
-        log_water_intake.func(500)
+        log_water_intake.func(500, config=USER_CONFIG)
 
-        r = get_remaining_daily_budget.func()
+        r = get_remaining_daily_budget.func(config=USER_CONFIG)
         assert r["consumed"]["calories"] == 600
         assert r["consumed"]["water_ml"] == 500
         # targets: 2259 kcal (computed and validated earlier in the suite)
@@ -140,25 +140,25 @@ class TestRemainingBudget:
 class TestMealPlan:
     def test_save_and_get_roundtrip(self, user_env):
         plan = "Monday: oats + chicken salad + salmon. Tuesday: eggs + soup + stir fry."
-        r = save_meal_plan.func(plan, notes="no shellfish")
+        r = save_meal_plan.func(plan, notes="no shellfish", config=USER_CONFIG)
         assert r["saved"] is True
         week_id = r["week_id"]
         assert week_id == date.today().strftime("%G-W%V")
 
-        g = get_meal_plan.func()
+        g = get_meal_plan.func(config=USER_CONFIG)
         assert g["found"] is True
         assert g["plan_text"] == plan
         assert g["notes"] == "no shellfish"
 
-        g2 = get_meal_plan.func(week_id)
+        g2 = get_meal_plan.func(week_id=week_id, config=USER_CONFIG)
         assert g2["found"] is True
 
     def test_get_without_plan(self, user_env):
-        g = get_meal_plan.func()
+        g = get_meal_plan.func(config=USER_CONFIG)
         assert g["found"] is False
 
     def test_plan_appears_in_context(self, user_env):
-        save_meal_plan.func("Mon: pancakes")
+        save_meal_plan.func("Mon: pancakes", config=USER_CONFIG)
         ctx = _memory(user_env).assemble_context()
         assert "MEAL PLAN" in ctx
         assert "pancakes" in ctx
@@ -166,7 +166,7 @@ class TestMealPlan:
 
 class TestWeeklySummary:
     def test_requires_logs(self, user_env):
-        r = generate_weekly_summary.func()
+        r = generate_weekly_summary.func(config=USER_CONFIG)
         assert "error" in r
 
     def test_aggregates_recent_logs(self, user_env):
@@ -179,7 +179,7 @@ class TestWeeklySummary:
                            compliance_score=0.8)
             memory.save_daily_log(log)
 
-        r = generate_weekly_summary.func()
+        r = generate_weekly_summary.func(config=USER_CONFIG)
         assert r["saved"] is True
         assert r["days_logged"] == 3
         assert r["avg_daily_calories"] == 2000

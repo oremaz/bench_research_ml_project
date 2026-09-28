@@ -46,13 +46,13 @@ class TestAgentLive:
         from langchain_core.messages import HumanMessage, AIMessage
         from nutricoach.agent import build_nutricoach_graph
 
-        graph = build_nutricoach_graph(username=TEST_USER, use_checkpointer=False)
+        graph = build_nutricoach_graph(os.environ["OPENROUTER_API_KEY"], username=TEST_USER, use_checkpointer=False)
         try:
             result = graph.invoke(
                 {"messages": [HumanMessage(content=(
                     "Calculate my nutrition targets: 28 year old female, 62kg, "
                     "168cm, light activity, maintain weight."))]},
-                config={"recursion_limit": 20},
+                config={"recursion_limit": 20, "configurable": {"username": TEST_USER}},
             )
         except Exception as e:
             _skip_if_rate_limited(e)
@@ -74,13 +74,13 @@ class TestAgentLive:
         from langchain_core.messages import HumanMessage
         from nutricoach.agent import build_nutricoach_graph
 
-        graph = build_nutricoach_graph(username=TEST_USER, use_checkpointer=False)
+        graph = build_nutricoach_graph(os.environ["OPENROUTER_API_KEY"], username=TEST_USER, use_checkpointer=False)
         try:
             graph.invoke(
                 {"messages": [HumanMessage(content=(
                     "Compute nutrition targets for a 40 year old male, 90kg, 185cm, "
                     "sedentary, who wants to lose weight. Use the tool."))]},
-                config={"recursion_limit": 20},
+                config={"recursion_limit": 20, "configurable": {"username": TEST_USER}},
             )
         except Exception as e:
             _skip_if_rate_limited(e)

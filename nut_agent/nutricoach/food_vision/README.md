@@ -1,6 +1,7 @@
 # Food Vision: Multi-Method Food Image Analysis
 
 Analyze food photos to estimate ingredients, portion sizes, and calories/macros.  
+In NutriCoach, the Food Analysis tab lets you change the OpenRouter vision model ID for agent analysis and method comparisons. Choose a model that accepts images; pricing depends on the selected model.
 Four methods are implemented for comparison, from traditional CV to pure LLM.
 
 ## Methods
@@ -14,17 +15,15 @@ Four methods are implemented for comparison, from traditional CV to pure LLM.
 - **Install**: `pip install rfdetr supervision`
 
 ### Method 2: Pure vLLM via OpenRouter (`vlm_analyzer.py`)
-- **Architecture**: OpenRouter vision model (default is a free-tier model set by
-  `OPENROUTER_VISION_MODEL` in `shared/config.py`, with server-side fallbacks;
-  point it at e.g. `anthropic/claude-opus-4-6` on a paid tier for best quality)
+- **Architecture**: `stealth/space-bunny-alpha` via OpenRouter API by default
 - **Approach**: 3-step chained prompts: (1) identify foods, (2) estimate portions, (3) compute nutrition
 - **Also includes**: `VLMAnalyzerSingleShot`, a single comprehensive prompt variant (faster, cheaper)
-- **Strengths**: Best food identification (handles complex dishes, mixed meals, sauces); no model training needed
-- **Weaknesses**: API cost (~$0.01-0.05/image), latency (3-10s), no local fallback
+- **Strengths**: Handles complex dishes without model training
+- **Weaknesses**: Multiple remote calls and no local fallback; image accuracy has not been validated for the new default model
 - **Install**: `pip install openai` + set `OPENROUTER_API_KEY`
 
 ### Method 3: CLIP Zero-Shot + LLM Ensemble (`clip_analyzer.py`)
-- **Architecture**: CLIP ViT-B/32 + Claude Opus via OpenRouter
+- **Architecture**: CLIP ViT-B/32 + `stealth/space-bunny-alpha` via OpenRouter by default
 - **Approach**: CLIP zero-shot classifies against 100+ food labels → LLM refines detections and estimates portions → nutrition DB lookup
 - **Strengths**: CLIP runs locally (fast, free); LLM only needed for refinement; good for common foods
 - **Weaknesses**: CLIP single-label classification misses multiple items; LLM refinement still needs API
@@ -51,9 +50,9 @@ third of the latency and 12x fewer parameters. Note jina-v5 is CC BY-NC 4.0
 (non-commercial).
 
 ### Method 4: RAG-Enhanced VLM, DietAI24-inspired (`rag_vlm_analyzer.py`)
-- **Architecture**: Claude Opus via OpenRouter + local nutrition DB retrieval
+- **Architecture**: `stealth/space-bunny-alpha` via OpenRouter + local nutrition DB retrieval by default
 - **Approach**: VLM identifies foods → retrieve per-100g nutrition data from DB → VLM reasons over image + DB data → cross-validate portions against standard serving sizes
-- **Strengths**: Grounds calorie estimates in real nutrition data (reduces hallucination); cross-validates portions; most accurate method
+- **Strengths**: Grounds calorie estimates in real nutrition data and cross-validates portions
 - **Weaknesses**: 2 API calls per image; slightly slower than single-shot VLM
 - **Install**: `pip install openai`
 
@@ -66,7 +65,7 @@ Run all methods on the same image and compare results:
 python -m nutricoach.food_vision.compare --image path/to/plate.jpg
 
 # Specific methods only
-python -m nutricoach.food_vision.compare --image plate.jpg --methods vlm_claude,rag_vlm
+python -m nutricoach.food_vision.compare --image plate.jpg --methods vlm_chain,rag_vlm
 
 # Directory of images, save results
 python -m nutricoach.food_vision.compare --image-dir ./test_images/ --output results.json
@@ -90,7 +89,7 @@ The `analyze_food_image` tool in `nutricoach/tools.py` integrates food vision in
 User: "Analyze this photo of my lunch" → Agent calls analyze_food_image tool
   → RAG VLM identifies: grilled chicken (180g), rice (200g), broccoli (120g)
   → Returns: 650 kcal, P:52g, C:58g, F:12g
-  → Auto-logs to daily intake
+  → Logs to daily intake only if the user explicitly asks to log it
 ```
 
 ## RF-DETR Fine-Tuning Guide
@@ -150,8 +149,8 @@ best_checkpoint = trainer.train(
 | Accuracy (food ID) | Low (COCO) / High (fine-tuned) | High | Medium | High |
 | Accuracy (portions) | Low (bbox area) | Medium | Medium | High (DB-grounded) |
 | Latency | <1s | 5-10s | 2-5s | 4-8s |
-| Cost/image | $0 | ~$0.03 | ~$0.01 | ~$0.02 |
+| API token price with current default | $0 | $0 | $0 | $0 |
 | Needs training | Yes | No | No | No |
 | Offline capable | Yes | No | Partial | No |
 
-**Recommendation**: Use **RAG VLM** for best accuracy, **VLM single-shot** for speed, **RF-DETR** for offline/free usage after fine-tuning.
+The OpenRouter default currently has free token pricing and may have rate limits. Other model IDs can incur charges. Accuracy and latency in the table are indicative and have not been revalidated with Space Bunny Alpha.

@@ -1,5 +1,5 @@
 """
-Smart Recipe Lab - Standalone Streamlit app for ML-powered recipe analysis.
+Smart Recipe Lab - Standalone Streamlit app for recipe analysis.
 Stateless, no login required, no LangGraph.
 """
 
@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
+from shared.config import OPENROUTER_MODEL_ID
 
 st.set_page_config(
     page_title="Smart Recipe Lab",
@@ -23,17 +24,22 @@ st.set_page_config(
 
 def get_predictor():
     """Initialize or retrieve the FoodModelPredictor."""
-    if "food_predictor" not in st.session_state or st.session_state["food_predictor"] is None:
-        api_key = st.session_state.get("api_key") or os.environ.get("GOOGLE_API_KEY", "")
-        if not api_key:
-            return None
+    api_key = st.session_state.get("api_key") or os.environ.get("OPENROUTER_API_KEY", "")
+    model_id = st.session_state.get("model_id") or OPENROUTER_MODEL_ID
+    predictor = st.session_state.get("food_predictor")
+    if predictor is None or predictor.api_key != api_key or predictor.model_id != model_id:
         from recipe_lab.predictor import FoodModelPredictor
-        st.session_state["food_predictor"] = FoodModelPredictor(api_key=api_key)
+        with st.spinner("Preparing local embeddings and LightGBM models (first run may take several minutes)..."):
+            try:
+                st.session_state["food_predictor"] = FoodModelPredictor(api_key=api_key, model_id=model_id)
+            except Exception as exc:
+                st.error(f"Could not prepare recipe models: {exc}")
+                return None
     return st.session_state["food_predictor"]
 
 
 def display_analysis_results(analysis: dict):
-    """Display ML analysis results for a single recipe."""
+    """Display analysis results for a single recipe."""
     if "error" in analysis:
         st.error(f"Analysis failed: {analysis['error']}")
         return
@@ -76,8 +82,7 @@ def display_analysis_results(analysis: dict):
                 st.markdown(f"**{i}.** {step}")
         st.markdown("---")
 
-    # ML Predictions
-    st.markdown("### ML Model Predictions")
+    st.markdown("### LightGBM predictions")
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -87,7 +92,7 @@ def display_analysis_results(analysis: dict):
             for label, prob in difficulty["all_probabilities"].items():
                 st.write(f"{label}: {prob:.1%}")
         else:
-            st.write(f"{difficulty.get('prediction', 'Unknown')}: {difficulty.get('confidence', 0):.1%}")
+            st.write(difficulty.get('prediction', 'Unknown'))
 
     with col2:
         meal_type = analysis.get("meal_type", {})
@@ -96,7 +101,7 @@ def display_analysis_results(analysis: dict):
             for label, prob in meal_type["all_probabilities"].items():
                 st.write(f"{label.title()}: {prob:.1%}")
         else:
-            st.write(f"{meal_type.get('prediction', 'Unknown')}: {meal_type.get('confidence', 0):.1%}")
+            st.write(meal_type.get('prediction', 'Unknown'))
 
     with col3:
         time_class = analysis.get("time_class", {})
@@ -105,7 +110,7 @@ def display_analysis_results(analysis: dict):
             for label, prob in time_class["all_probabilities"].items():
                 st.write(f"{label}: {prob:.1%}")
         else:
-            st.write(f"{time_class.get('prediction', 'Unknown')}: {time_class.get('confidence', 0):.1%}")
+            st.write(time_class.get('prediction', 'Unknown'))
 
     nutrients = analysis.get("nutrients", {})
     per_serving = nutrients.get("per_serving")
@@ -125,14 +130,16 @@ def display_analysis_results(analysis: dict):
 
 def main():
     st.title("Smart Recipe Lab")
-    st.markdown("Analyze recipes using trained ML models. Get predictions for difficulty, meal type, and cooking time.")
+    st.markdown("Analyze recipes with local embeddings and LightGBM. OpenRouter adds optional explanations.")
 
     # Sidebar: API key
     with st.sidebar:
         st.header("Settings")
-        api_key = st.text_input("Google API Key", type="password", value=os.environ.get("GOOGLE_API_KEY", ""))
-        if api_key:
-            st.session_state["api_key"] = api_key
+        api_key = st.text_input("OpenRouter API Key", type="password", value=os.environ.get("OPENROUTER_API_KEY", ""))
+        model_id = st.text_input("OpenRouter model ID", value=os.environ.get("OPENROUTER_MODEL_ID", OPENROUTER_MODEL_ID))
+        st.caption("Default model: [stealth/space-bunny-alpha](https://openrouter.ai/stealth/space-bunny-alpha)")
+        st.session_state["api_key"] = api_key or None
+        st.session_state["model_id"] = model_id.strip() or OPENROUTER_MODEL_ID
 
     # Main tabs
     tab_single, tab_compare = st.tabs(["Analyze Recipe", "Compare Recipes"])
@@ -148,7 +155,6 @@ def main():
         if analyze_button and recipe_text.strip():
             predictor = get_predictor()
             if predictor is None:
-                st.error("Please enter your Google API key in the sidebar.")
                 return
 
             with st.spinner("Analyzing recipe..."):
@@ -157,10 +163,11 @@ def main():
 
             # LLM interpretation
             if "error" not in analysis:
-                with st.spinner("Generating interpretation..."):
-                    interpretation = predictor.generate_llm_interpretation(analysis)
-                st.markdown("### AI Interpretation")
-                st.markdown(interpretation)
+                if predictor.client:
+                    with st.spinner("Generating interpretation..."):
+                        interpretation = predictor.generate_llm_interpretation(analysis)
+                    st.markdown("### AI Interpretation")
+                    st.markdown(interpretation)
 
         elif analyze_button:
             st.warning("Please enter a recipe description.")
@@ -178,7 +185,6 @@ def main():
         if compare_button and recipe_a.strip() and recipe_b.strip():
             predictor = get_predictor()
             if predictor is None:
-                st.error("Please enter your Google API key in the sidebar.")
                 return
 
             col_res_a, col_res_b = st.columns(2)
@@ -198,7 +204,7 @@ def main():
 
     # Footer
     st.markdown("---")
-    st.caption("Smart Recipe Lab - Powered by LightGBM + Google Gemini text embeddings")
+    st.caption("Smart Recipe Lab - Powered by local Hugging Face embeddings, LightGBM, and optional OpenRouter")
 
 
 if __name__ == "__main__":

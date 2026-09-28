@@ -5,21 +5,28 @@ or the sentence-transformers encoder by building stubs via __new__.
 
 import sys
 import numpy as np
+import pytest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+
+import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from recipe_lab.predictor import FoodModelPredictor, DEFAULT_TASKS, EMBEDDING_DIM
+from recipe_lab.local_models import _cache_key, _total_minutes, load_or_train_models
 
 
 def _make_predictor_stub():
     """Create a FoodModelPredictor stub without loading models or calling APIs."""
     predictor = FoodModelPredictor.__new__(FoodModelPredictor)
     predictor.client = None
-    predictor.google_api_key = None
-    predictor.openrouter_api_key = None
+    predictor.api_key = None
+    predictor.model_id = "stealth/space-bunny-alpha"
+    predictor.local_encoder = None
+    predictor.nutrients_uses_local = False
     predictor.models_path = Path("/fake")
     predictor.meta = {}
     predictor.tasks = DEFAULT_TASKS
@@ -202,6 +209,14 @@ class TestAnalyzeRecipe:
 class TestModelFamilyRegistry:
     """The predictor must be able to serve every deployable model family."""
 
+    @pytest.fixture(autouse=True)
+    def requires_model_registry(self):
+        try:
+            from pipelines_torch.models import MODEL_REGISTRY
+        except Exception as exc:
+            pytest.skip(f"model registry unavailable in this environment: {exc}")
+        return MODEL_REGISTRY
+
     def test_new_families_registered(self):
         from pipelines_torch.models import MODEL_REGISTRY
 
@@ -257,3 +272,31 @@ class TestModelFamilyRegistry:
         reg.fit(X, y_reg)
         preds = reg.predict(X[:5])
         assert tuple(preds.shape) == (5, 2)
+
+
+def test_training_embeddings_are_cached(tmp_path, monkeypatch):
+    data_path = tmp_path / "recipes.csv"
+    pd.DataFrame({
+        "recipe_text": ["oats", "pasta", "soup"],
+        "difficult": ["Easy", "More effort", "Easy"],
+        "subcategory": ["Breakfast recipes", "Dinner recipes", "Lunch recipes"],
+        "times": ["{'Preparation': '10 mins'}", "{'Cooking': '20 mins'}", "{'Cooking': '40 mins'}"],
+        "nutrients": [None, None, None],
+    }).to_csv(data_path, index=False)
+    encoder = MagicMock()
+    encoder.encode.return_value = np.ones((3, 4), dtype=np.float32)
+    model_loads = MagicMock(return_value=encoder)
+    monkeypatch.setitem(sys.modules, "sentence_transformers", SimpleNamespace(SentenceTransformer=model_loads))
+    with patch("recipe_lab.local_models._fit", return_value="trained"):
+        load_or_train_models(data_path, tmp_path)
+        assert encoder.encode.call_count == 1
+        assert encoder.encode.call_args.kwargs["prompt_name"] == "document"
+        assert model_loads.call_args.kwargs["trust_remote_code"] is True
+        (tmp_path / f"lightgbm_{_cache_key(data_path)}.joblib").unlink()
+        load_or_train_models(data_path, tmp_path)
+        assert encoder.encode.call_count == 1
+
+
+def test_time_parser():
+    assert _total_minutes("{'Preparation': '1 hr 15 mins', 'Cooking': '20 mins'}") == 95
+    assert _total_minutes("No Time") == 0

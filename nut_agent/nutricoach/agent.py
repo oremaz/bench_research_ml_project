@@ -8,7 +8,6 @@ Changes from v1 (based on feedback):
 - Kept StateGraph instead of create_react_agent for future conditional routing
 """
 
-import os
 import sqlite3
 import time
 from typing import Annotated, Any, Optional
@@ -19,18 +18,12 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
-from shared.config import (
-    GEMINI_MODEL,
-    SECRETS_DIR,
-    OPENROUTER_BASE_URL,
-    OPENROUTER_AGENT_MODEL,
-    OPENROUTER_AGENT_FALLBACKS,
-)
+from shared.config import OPENROUTER_MODEL_ID, SECRETS_DIR
 from shared.memory import MemoryManager
-from nutricoach.tools import ALL_TOOLS, set_current_user
+from nutricoach.tools import ALL_TOOLS
 
 
 class NutriCoachState(TypedDict):
@@ -65,6 +58,7 @@ Guidelines:
 - When the user shares a food photo, use the analyze_food_image tool.
 - After the user accepts a meal plan, save it with save_meal_plan. Use get_meal_plan
   to check today's planned meals or to build a grocery list from the plan.
+- Food photo values are estimates. Do not log a photo analysis unless the user explicitly asks to log it.
 - Keep responses concise and actionable.
 """
 
@@ -83,66 +77,30 @@ def _get_checkpointer(username: str):
         return None
 
 
-def _make_llm(api_key: Optional[str]):
-    """
-    Pick the LLM provider from the supplied key or environment.
-    Google Gemini when a Google key is available; otherwise OpenRouter
-    (free-tier default model, override with OPENROUTER_AGENT_MODEL).
-    """
-    google_key = None
-    openrouter_key = os.environ.get("OPENROUTER_API_KEY")
-
-    if api_key and api_key.startswith("sk-or-"):
-        openrouter_key = api_key
-    elif api_key:
-        google_key = api_key
-    else:
-        google_key = os.environ.get("GOOGLE_API_KEY")
-
-    if google_key:
-        os.environ["GOOGLE_API_KEY"] = google_key
-        return ChatGoogleGenerativeAI(model=GEMINI_MODEL)
-
-    if openrouter_key:
-        from langchain_openai import ChatOpenAI
-
-        return ChatOpenAI(
-            model=OPENROUTER_AGENT_MODEL,
-            base_url=OPENROUTER_BASE_URL,
-            api_key=openrouter_key,
-            temperature=0.2,
-            max_retries=3,
-            extra_body={"models": OPENROUTER_AGENT_FALLBACKS},
-        )
-
-    raise ValueError(
-        "No LLM credentials found. Set GOOGLE_API_KEY or OPENROUTER_API_KEY, "
-        "or pass an API key explicitly."
-    )
-
-
 def build_nutricoach_graph(
-    api_key: Optional[str] = None,
-    username: str = "anonymous",
+    openrouter_api_key: str,
+    username: str,
     use_checkpointer: bool = True,
+    model_id: str = OPENROUTER_MODEL_ID,
 ) -> Any:
     """
     Build and return the NutriCoach LangGraph agent.
 
     Args:
-        api_key: Google API key for Gemini, or an OpenRouter key (sk-or-...).
-                 None uses GOOGLE_API_KEY / OPENROUTER_API_KEY from the environment.
+        openrouter_api_key: OpenRouter API key
         username: Current user's username (for memory access)
         use_checkpointer: Whether to use SqliteSaver for persistence
+        model_id: OpenRouter model identifier
 
     Returns:
         Compiled LangGraph
     """
-    # Set user context for tools
-    set_current_user(username)
-
     # Initialize LLM with tools bound
-    llm = _make_llm(api_key)
+    llm = ChatOpenAI(
+        model=model_id,
+        api_key=openrouter_api_key,
+        base_url="https://openrouter.ai/api/v1",
+    )
     llm_with_tools = llm.bind_tools(ALL_TOOLS)
 
     # Memory manager for context assembly
@@ -167,6 +125,9 @@ def build_nutricoach_graph(
             m for m in state.get("messages", [])
             if not isinstance(m, SystemMessage)
         ]
+        human_indices = [i for i, m in enumerate(conversation_messages) if isinstance(m, HumanMessage)]
+        if len(human_indices) > 12:
+            conversation_messages = conversation_messages[human_indices[-12]:]
 
         all_messages = [system_msg] + conversation_messages
         # Free-tier providers intermittently return 500/429 in a 200 body,

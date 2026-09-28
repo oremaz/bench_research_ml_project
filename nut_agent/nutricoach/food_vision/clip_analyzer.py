@@ -20,12 +20,13 @@ import os
 import time
 from typing import List, Optional, Tuple
 
+from shared.config import OPENROUTER_MODEL_ID
+
 import torch
 from PIL import Image
 
 from .base import FoodAnalyzer, FoodAnalysisResult, FoodItem
 from .nutrition_db import NutritionDB, FOOD_DB
-from shared.config import OPENROUTER_VISION_MODEL, OPENROUTER_VISION_FALLBACKS
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +134,7 @@ class CLIPFoodAnalyzer(FoodAnalyzer):
         top_k: int = 5,
         confidence_threshold: float = 0.05,
         openrouter_api_key: Optional[str] = None,
-        llm_model: str = None,
+        llm_model: str = OPENROUTER_MODEL_ID,
         device: Optional[str] = None,
         backend: str = "clip",
     ):
@@ -144,7 +145,7 @@ class CLIPFoodAnalyzer(FoodAnalyzer):
         self.top_k = top_k
         self.confidence_threshold = confidence_threshold
         self.api_key = openrouter_api_key or os.environ.get("OPENROUTER_API_KEY", "")
-        self.llm_model = llm_model or OPENROUTER_VISION_MODEL
+        self.llm_model = llm_model or OPENROUTER_MODEL_ID
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.nutrition_db = NutritionDB()
         self._clip_model = None
@@ -274,7 +275,6 @@ Return ONLY a JSON array:
                 }],
                 max_tokens=1500,
                 temperature=0.1,
-                extra_body={"models": OPENROUTER_VISION_FALLBACKS},
             )
 
             raw = response.choices[0].message.content.strip()

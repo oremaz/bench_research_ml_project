@@ -14,13 +14,16 @@ import logging
 import numpy as np
 from typing import Dict, Any, List, Union, Optional
 from pathlib import Path
+from openai import OpenAI
+
+from recipe_lab.local_models import NUTRIENT_TARGETS, load_or_train_models
+from shared.config import OPENROUTER_MODEL_ID
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.append(str(REPO_ROOT))
 sys.path.append(str(REPO_ROOT / "ml_pipeline"))
 
 from pipelines_torch.base import GeneralPipelineSklearn
-from pipelines_torch.models import MODEL_REGISTRY
 from utils.utils import load_model_by_name
 
 logger = logging.getLogger(__name__)
@@ -44,7 +47,6 @@ DEFAULT_TASKS = {
 }
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-OPENROUTER_TEXT_MODEL = os.environ.get("OPENROUTER_TEXT_MODEL", "google/gemma-4-31b-it:free")
 
 
 class LocalEmbedder:
@@ -138,7 +140,8 @@ class FoodModelPredictor:
     Supports: difficulty, meal type, time class, and per-serving nutrient prediction.
     """
 
-    def __init__(self, models_path: str = None, api_key: str = None, device: Optional[str] = None):
+    def __init__(self, models_path: str = None, api_key: str = None, device: Optional[str] = None,
+                 model_id: str = OPENROUTER_MODEL_ID):
         if models_path is None:
             models_path = REPO_ROOT / "ml_pipeline" / "results"
         self.models_path = Path(models_path)
@@ -146,22 +149,21 @@ class FoodModelPredictor:
         self.meta = self._load_meta()
         self.tasks = self.meta.get("tasks", DEFAULT_TASKS)
         emb_meta = self.meta.get("embedding", {})
+        self.legacy_compatible = emb_meta.get("model") in (
+            LOCAL_EMBEDDING_MODEL, "jinaai/jina-embeddings-v5-omni-small",
+        )
         self.embedder = LocalEmbedder(
             model_name=emb_meta.get("model", LOCAL_EMBEDDING_MODEL),
             device=device,
         )
         self.embedding_dim = emb_meta.get("dim", EMBEDDING_DIM)
 
-        # Optional LLM backends for description enhancement / interpretation
-        self.google_api_key = api_key or os.getenv("GOOGLE_API_KEY")
-        self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
-        self.client = None
-        if self.google_api_key:
-            try:
-                from google import genai
-                self.client = genai.Client(api_key=self.google_api_key)
-            except Exception as e:
-                logger.warning("Could not init Google genai client: %s", e)
+        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
+        self.model_id = model_id
+        self.client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=self.api_key) if self.api_key else None
+        self.local_encoder = None
+        self.local_models = {}
+        self.nutrients_uses_local = False
 
         self.difficulty_pipeline = None
         self.meal_type_pipeline = None
@@ -175,7 +177,26 @@ class FoodModelPredictor:
         self.time_class_labels = self.tasks["time_class"]["labels"]
         self.nutrient_targets = self.tasks.get("nutrients", DEFAULT_TASKS["nutrients"])["targets"]
 
-        self._load_models()
+        if self.legacy_compatible:
+            self._load_models()
+        try:
+            self.local_encoder, self.local_models = load_or_train_models()
+            for task in ("difficulty", "meal_type", "time_class"):
+                if task in self.local_models:
+                    setattr(self, f"{task}_pipeline", GeneralPipelineSklearn(
+                        model=self.local_models[task], task_type="classification"))
+                    setattr(self, f"{task}_labels", list(self.local_models[task].classes_))
+            if self.nutrients_hf is None and self.nutrients_pipeline is None and "nutrients" in self.local_models:
+                self.nutrients_pipeline = GeneralPipelineSklearn(
+                    model=self.local_models["nutrients"], task_type="regression")
+                self.nutrient_targets = list(NUTRIENT_TARGETS)
+                self.nutrients_uses_local = True
+            self.embedding_dim = 1024
+        except Exception:
+            if any(getattr(self, attr) is None for attr in
+                   ("difficulty_pipeline", "meal_type_pipeline", "time_class_pipeline")):
+                raise
+            logger.warning("LFM2.5 unavailable; using existing compatible recipe checkpoints")
 
     def _load_meta(self) -> Dict[str, Any]:
         meta_path = self.models_path / "recipe_models_meta.json"
@@ -190,6 +211,7 @@ class FoodModelPredictor:
     @staticmethod
     def _registry_class(model_name: str, task_type: str):
         """Resolve the wrapper class for a checkpoint's model family."""
+        from pipelines_torch.models import MODEL_REGISTRY
         suffix = "classifier" if task_type == "classification" else "regressor"
         key = f"{model_name}_{suffix}"
         return MODEL_REGISTRY.get(key, MODEL_REGISTRY[f"lightgbm_{suffix}"])
@@ -245,23 +267,11 @@ class FoodModelPredictor:
     # --- LLM helpers ---
 
     def _generate_text(self, prompt: str) -> Optional[str]:
-        """Generate text with Google Gemini if configured, else OpenRouter free tier."""
+        """Generate optional recipe text with OpenRouter."""
         if self.client:
             try:
-                response = self.client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=prompt,
-                )
-                return response.text
-            except Exception as e:
-                logger.warning("Gemini generation failed: %s", e)
-
-        if self.openrouter_api_key:
-            try:
-                from openai import OpenAI
-                client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=self.openrouter_api_key)
-                response = client.chat.completions.create(
-                    model=OPENROUTER_TEXT_MODEL,
+                response = self.client.chat.completions.create(
+                    model=self.model_id,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=1500,
                     temperature=0.3,
@@ -344,6 +354,11 @@ class FoodModelPredictor:
     def get_text_embedding(self, text: str, task_type: str = "classification") -> List[float]:
         """Embed text with the same local encoder used at training time."""
         try:
+            if self.local_encoder is not None and (task_type == "classification" or
+                                                   (task_type == "regression" and self.nutrients_uses_local)):
+                return self.local_encoder.encode(
+                    [text], prompt_name="document", normalize_embeddings=True,
+                )[0].tolist()
             return self.embedder.embed(text).tolist()
         except Exception as e:
             logger.error("Embedding failed: %s", e)
@@ -451,9 +466,11 @@ class FoodModelPredictor:
                 logger.warning("Fine-tuned nutrients prediction failed: %s", e)
         if embedding is None:
             embedding = self.get_text_embedding(text)
+        elif getattr(self, "local_encoder", None) is not None:
+            embedding = self.get_text_embedding(text, task_type="regression")
         result = self.predict_nutrients_from_embedding(embedding)
         if "per_serving" in result:
-            result["method"] = self._task_model_name("nutrients")
+            result["method"] = "lightgbm_lfm2.5" if getattr(self, "nutrients_uses_local", False) else self._task_model_name("nutrients")
         return result
 
     def analyze_recipe(self, recipe_description: str) -> Dict[str, Any]:

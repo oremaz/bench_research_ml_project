@@ -40,17 +40,17 @@ nut_agent/
 ```bash
 # From the repository root (uses the repo uv environment)
 
-# NutriCoach (needs GOOGLE_API_KEY or OPENROUTER_API_KEY; OpenRouter free tier works)
+# NutriCoach (requires OPENROUTER_API_KEY)
 PYTHONPATH=nut_agent uv run streamlit run nut_agent/nutricoach/app.py
 
-# Recipe Lab (needs trained models in ../ml_pipeline/results/; embeddings run locally)
+# Recipe Lab (local embeddings and LightGBM; OpenRouter optional)
 PYTHONPATH=nut_agent uv run streamlit run nut_agent/recipe_lab/app.py
 
 # Train the Recipe Lab models (LightGBM/XGBoost/MLP on local embeddings, GPU)
 CUDA_VISIBLE_DEVICES=1 PYTHONPATH=. uv run python ml_pipeline/train_recipe_models.py
 
 # Run tests
-PYTHONPATH=nut_agent uv run python -m pytest nut_agent/tests/ -v
+PYTHONPATH=.:nut_agent uv run python -m pytest nut_agent/tests/ -q
 
 # Compare food analysis methods on an image
 cd nut_agent && python -m nutricoach.food_vision.compare --image plate.jpg
@@ -60,9 +60,8 @@ cd nut_agent && python -m nutricoach.food_vision.compare --image plate.jpg
 
 ### Agent Architecture (v2)
 
-LangGraph agent powered by Google Gemini, or by an OpenRouter model when only
-OPENROUTER_API_KEY is available (defaults to a free tool-capable model with
-server-side fallbacks; override with OPENROUTER_AGENT_MODEL). 5 tools:
+LangGraph agent powered by OpenRouter. The model ID is editable in the app and
+defaults to [`stealth/space-bunny-alpha`](https://openrouter.ai/stealth/space-bunny-alpha).
 
 ```
 START -> agent -> (tool_node -> agent)* -> END
@@ -102,6 +101,9 @@ Take a photo of your plate → get estimated ingredients, quantities, and calori
    Food101 in the food_vision README, CLIP wins 0.796 vs 0.743 top-1)
 4. **RAG VLM**: Database-grounded VLM estimation (recommended)
 
+The vision model ID is editable in the Food Analysis tab and applies to agent
+photo analysis and method comparisons. Choose an image-capable OpenRouter model.
+
 ### Persistence
 
 Conversation history is now managed by LangGraph's `SqliteSaver`:
@@ -116,12 +118,10 @@ Conversation history is now managed by LangGraph's `SqliteSaver`:
 from nutricoach.agent import build_nutricoach_graph, create_initial_state
 from langchain_core.messages import HumanMessage, AIMessage
 
-# Pass a Google key, an OpenRouter key (sk-or-...), or None to use
-# GOOGLE_API_KEY / OPENROUTER_API_KEY from the environment.
-graph = build_nutricoach_graph(None, "username")
+graph = build_nutricoach_graph("your_openrouter_api_key", "username")
 
 # Conversations are thread-based
-config = {"configurable": {"thread_id": "session-1"}, "recursion_limit": 20}
+config = {"configurable": {"thread_id": "session-1", "username": "username"}, "recursion_limit": 20}
 result = graph.invoke(
     {"messages": [HumanMessage(content="Calculate my nutrition targets")]},
     config=config,
@@ -139,11 +139,13 @@ Standalone recipe analyzer, with no login or conversation state:
 
 - **Analyze** a recipe: ML predictions (difficulty, meal type, time class) + optional LLM interpretation
 - **Compare** two recipes side-by-side
-- Works with trained models from `../ml_pipeline/results/`; degrades gracefully without them
-- Text embeddings are computed locally with sentence-transformers (`BAAI/bge-base-en-v1.5`,
-  GPU when available); the same encoder is used at training and inference time, and
-  `ml_pipeline/results/recipe_models_meta.json` records the embedding backend, label
-  order, and test metrics
+- The primary classifier uses local [`LiquidAI/LFM2.5-Embedding-350M`](https://huggingface.co/LiquidAI/LFM2.5-Embedding-350M)
+  embeddings and LightGBM. On first use, it embeds `ml_pipeline/recipes_df.csv`,
+  trains the models, and caches embeddings and checkpoints under
+  `nut_agent/secrets/recipe_lab_cache/`. Existing BGE checkpoints and the
+  fine-tuned nutrient head can still be used. The LFM2.5 cache is keyed by
+  model revision and dataset content.
+- OpenRouter is optional for recipe extraction and explanations.
 - Labels: difficulty `Easy` / `More effort` (2-class, `A challenge` merged at training),
   meal type `Breakfast` / `Lunch/Dinner` (binary), time class `<15` / `15-30` / `30-60` / `>60 min`
 - Nutrient estimation: per-serving `kcal`, `fat`, `saturates`, `carbs`, `sugars`,
@@ -155,8 +157,9 @@ Run `CUDA_VISIBLE_DEVICES=1 PYTHONPATH=. uv run python ml_pipeline/bench_recipe_
 from the repo root; full per-task results land in
 `ml_pipeline/results/bench_recipe_methods.json`. All numbers below are on the
 held-out test splits (`recipes_df_test_bis.csv` for difficulty/time/nutrients,
-the out-of-domain `recipes_df_test.csv` for meal type) with the
-`BAAI/bge-base-en-v1.5` embedding backend. **Bold** = deployed model.
+the out-of-domain `recipes_df_test.csv` for meal type) with the historical
+`BAAI/bge-base-en-v1.5` embedding backend. These results do not validate the
+current LFM2.5 classifier. **Bold** = the models deployed at that time.
 
 Classification, test accuracy / macro F1:
 
@@ -216,9 +219,9 @@ the local nutrition DB + LLM portions, not this model.
 
 `jinaai/jina-embeddings-v5-omni-small` (1.74B, 1024-d, CC BY-NC 4.0) was
 benchmarked against `BAAI/bge-base-en-v1.5` (109M, 768-d) as the recipe
-encoder. bge-base wins on every task despite being 16x smaller, so it stays
-the default (`RECIPE_EMBEDDING_MODEL` overrides; the jina path is supported
-by `LocalEmbedder`). Best method per task and backend:
+encoder. In that historical experiment, bge-base won on every task.
+`LocalEmbedder` remains available for existing checkpoints. Best method per
+task and backend:
 
 | Task | bge-base | jina-v5-omni-small |
 |------|----------|--------------------|
@@ -246,28 +249,25 @@ Nutrition constants are in `shared/config.py`:
 - `WEIGHT_GOAL_ADJUSTMENTS`: caloric surplus/deficit for goals
 
 Environment variables:
-- `GOOGLE_API_KEY`: Optional, preferred LLM (Gemini) when set
-- `OPENROUTER_API_KEY`: LLM fallback for the agent and required for food image analysis (Methods 2-4)
-- `OPENROUTER_AGENT_MODEL` / `OPENROUTER_VISION_MODEL`: Optional model overrides (defaults are free-tier models)
-- `RECIPE_EMBEDDING_MODEL`: Optional Recipe Lab embedding backend override for training
-  (default `BAAI/bge-base-en-v1.5`; `jinaai/jina-embeddings-v5-omni-small` is supported)
+- `OPENROUTER_API_KEY`: Required for NutriCoach chat and OpenRouter food image analysis; optional for Recipe Lab
+- `OPENROUTER_MODEL_ID`: Optional chat model override in both apps; defaults to `stealth/space-bunny-alpha`
 - `ROBOFLOW_API_KEY`: Optional, for downloading food detection datasets
 
 ## Testing
 
 ```bash
 # CPU suite (no keys or models needed)
-PYTHONPATH=nut_agent uv run python -m pytest nut_agent/tests/ -v \
+PYTHONPATH=.:nut_agent uv run python -m pytest nut_agent/tests/ -v \
     --ignore=nut_agent/tests/test_gpu_pipeline.py --ignore=nut_agent/tests/test_openrouter_live.py
 
 # GPU integration suite (trained models, embedder, CLIP; cuda:1)
-CUDA_VISIBLE_DEVICES=1 PYTHONPATH=nut_agent uv run python -m pytest nut_agent/tests/test_gpu_pipeline.py -v
+CUDA_VISIBLE_DEVICES=1 PYTHONPATH=.:nut_agent uv run python -m pytest nut_agent/tests/test_gpu_pipeline.py -v
 
 # Live OpenRouter tests (skipped without OPENROUTER_API_KEY; tolerate free-tier 429s)
-PYTHONPATH=nut_agent uv run python -m pytest nut_agent/tests/test_openrouter_live.py -v
+PYTHONPATH=.:nut_agent uv run python -m pytest nut_agent/tests/test_openrouter_live.py -v
 ```
 
-106 CPU tests across 7 files (utils, auth, memory, predictor, intent, agent, tools),
-plus a GPU integration suite (embedder, trained recipe models, nutrients head,
-CLIP and Jina zero-shot backends, RF-DETR) and live agent tests. CPU tests run
-without API keys or ML models.
+The current checkout passed 110 tests with 19 skips using
+`PYTHONPATH=.:nut_agent uv run python -m pytest nut_agent/tests -q`.
+The skips cover unavailable GPU resources, live API credentials, and the
+model registry on macOS without `libomp`.

@@ -8,6 +8,7 @@ from datetime import date
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from shared.config import (
@@ -17,6 +18,7 @@ from shared.config import (
     MACRO_RATIOS,
     WATER_ML_PER_KG,
     SECRETS_DIR,
+    OPENROUTER_MODEL_ID,
 )
 from shared.utils import calculate_bmi, validate_nutrition_targets
 from shared.memory import MemoryManager
@@ -30,19 +32,10 @@ from shared.schemas import (
 from nutricoach.food_vision.base import FoodAnalysisResult
 
 
-# Module-level reference set by agent.py at graph build time
-_current_username: Optional[str] = None
-
-
-def set_current_user(username: str):
-    """Set the current user for tool context."""
-    global _current_username
-    _current_username = username
-
-
-def _get_memory() -> Optional[MemoryManager]:
-    if _current_username:
-        return MemoryManager(_current_username, SECRETS_DIR)
+def _get_memory(config: RunnableConfig) -> Optional[MemoryManager]:
+    username = config.get("configurable", {}).get("username")
+    if username:
+        return MemoryManager(username, SECRETS_DIR)
     return None
 
 
@@ -67,6 +60,7 @@ def calculate_personalized_nutrition_targets(
     gender: str,
     activity_level: str,
     weight_goal: str,
+    config: RunnableConfig,
 ) -> Dict[str, Any]:
     """
     Calculate personalized daily nutrition targets based on user profile and goals.
@@ -130,7 +124,7 @@ def calculate_personalized_nutrition_targets(
         validation = validate_nutrition_targets(targets)
 
         # Persist targets to memory
-        memory = _get_memory()
+        memory = _get_memory(config)
         if memory:
             memory.save_nutrition_targets(NutritionTargets(**targets))
 
@@ -153,6 +147,7 @@ def calculate_personalized_nutrition_targets(
 @tool
 def log_daily_intake(
     meals_description: str,
+    config: RunnableConfig,
     weight_kg: Optional[float] = None,
     energy_level: Optional[str] = None,
     notes: Optional[str] = None,
@@ -179,7 +174,7 @@ def log_daily_intake(
     Returns:
         Confirmation of logged data with updated daily totals
     """
-    memory = _get_memory()
+    memory = _get_memory(config)
     if not memory:
         return {"error": "No user context available for logging"}
 
@@ -226,7 +221,7 @@ def log_daily_intake(
 
 
 @tool
-def get_progress_summary(days: int = 7) -> Dict[str, Any]:
+def get_progress_summary(config: RunnableConfig, days: int = 7) -> Dict[str, Any]:
     """
     Get a summary of the user's recent nutrition progress.
 
@@ -236,7 +231,7 @@ def get_progress_summary(days: int = 7) -> Dict[str, Any]:
     Returns:
         Progress summary with trends and statistics
     """
-    memory = _get_memory()
+    memory = _get_memory(config)
     if not memory:
         return {"error": "No user context available"}
 
@@ -297,7 +292,7 @@ def get_progress_summary(days: int = 7) -> Dict[str, Any]:
 
 
 @tool
-def update_user_profile(field: str, value: str) -> Dict[str, Any]:
+def update_user_profile(field: str, value: str, config: RunnableConfig) -> Dict[str, Any]:
     """
     Update a specific field in the user's profile.
 
@@ -308,7 +303,7 @@ def update_user_profile(field: str, value: str) -> Dict[str, Any]:
     Returns:
         Confirmation of the update
     """
-    memory = _get_memory()
+    memory = _get_memory(config)
     if not memory:
         return {"error": "No user context available"}
 
@@ -353,15 +348,18 @@ def update_user_profile(field: str, value: str) -> Dict[str, Any]:
 @tool
 def analyze_food_image(
     image_path: str,
+    config: RunnableConfig,
     method: str = "rag_vlm",
+    log_meal: bool = False,
 ) -> Dict[str, Any]:
     """
     Analyze a food photo to identify ingredients, estimate portions, and compute calories/macros.
 
     Args:
         image_path: Path to the food image file
-        method: Analysis method — 'vlm_claude' (pure LLM), 'rag_vlm' (RAG-enhanced, recommended),
+        method: Analysis method — 'vlm_chain' (pure LLM), 'rag_vlm' (RAG-enhanced, recommended),
                 'clip_ensemble' (CLIP + LLM), 'rf_detr' (object detection)
+        log_meal: Save the estimated meal to today's log only when the user asks to log it
 
     Returns:
         Dictionary with detected food items and nutritional breakdown
@@ -373,26 +371,27 @@ def analyze_food_image(
 
     try:
         analyzer = None
+        api_key = config.get("configurable", {}).get("openrouter_api_key")
+        model_id = config.get("configurable", {}).get("vision_model_id") or OPENROUTER_MODEL_ID
 
-        if method == "vlm_claude":
+        if method == "vlm_chain":
             from nutricoach.food_vision.vlm_analyzer import VLMAnalyzer
-            analyzer = VLMAnalyzer()
+            analyzer = VLMAnalyzer(api_key=api_key, model=model_id)
         elif method == "rag_vlm":
             from nutricoach.food_vision.rag_vlm_analyzer import RAGVLMAnalyzer
-            analyzer = RAGVLMAnalyzer()
+            analyzer = RAGVLMAnalyzer(api_key=api_key, model=model_id)
         elif method == "clip_ensemble":
             from nutricoach.food_vision.clip_analyzer import CLIPFoodAnalyzer
-            analyzer = CLIPFoodAnalyzer()
+            analyzer = CLIPFoodAnalyzer(openrouter_api_key=api_key, llm_model=model_id)
         elif method == "rf_detr":
             from nutricoach.food_vision.rf_detr_analyzer import RFDETRAnalyzer
             analyzer = RFDETRAnalyzer()
         else:
-            return {"error": f"Unknown method: {method}. Use 'vlm_claude', 'rag_vlm', 'clip_ensemble', or 'rf_detr'"}
+            return {"error": f"Unknown method: {method}. Use 'vlm_chain', 'rag_vlm', 'clip_ensemble', or 'rf_detr'"}
 
         result = analyzer.analyze(image_path)
 
-        # Also log the meal if we have a user context
-        memory = _get_memory()
+        memory = _get_memory(config) if log_meal else None
         if memory and result.food_items and not result.error:
             today = date.today().isoformat()
             existing_log = memory.load_daily_log(today)
@@ -422,7 +421,7 @@ def analyze_food_image(
 
 
 @tool
-def log_water_intake(amount_ml: float) -> Dict[str, Any]:
+def log_water_intake(amount_ml: float, config: RunnableConfig) -> Dict[str, Any]:
     """
     Add water intake to today's log.
 
@@ -432,7 +431,7 @@ def log_water_intake(amount_ml: float) -> Dict[str, Any]:
     Returns:
         Updated water total for today and remaining amount vs target
     """
-    memory = _get_memory()
+    memory = _get_memory(config)
     if not memory:
         return {"error": "No user context available"}
 
@@ -497,7 +496,7 @@ def lookup_food_nutrition(food_name: str, grams: float = 100.0) -> Dict[str, Any
 
 
 @tool
-def get_remaining_daily_budget() -> Dict[str, Any]:
+def get_remaining_daily_budget(config: RunnableConfig) -> Dict[str, Any]:
     """
     Compute what the user can still eat and drink today: nutrition targets
     minus everything logged so far. Use for questions like "what's left for
@@ -506,7 +505,7 @@ def get_remaining_daily_budget() -> Dict[str, Any]:
     Returns:
         Remaining calories, macros, and water for today
     """
-    memory = _get_memory()
+    memory = _get_memory(config)
     if not memory:
         return {"error": "No user context available"}
 
@@ -544,7 +543,7 @@ def get_remaining_daily_budget() -> Dict[str, Any]:
 
 
 @tool
-def save_meal_plan(plan_text: str, notes: str = "") -> Dict[str, Any]:
+def save_meal_plan(plan_text: str, config: RunnableConfig, notes: str = "") -> Dict[str, Any]:
     """
     Save the meal plan agreed with the user for the current week. Call this
     after presenting a meal plan the user accepts, passing the full plan text.
@@ -557,7 +556,7 @@ def save_meal_plan(plan_text: str, notes: str = "") -> Dict[str, Any]:
     Returns:
         Confirmation with the week id
     """
-    memory = _get_memory()
+    memory = _get_memory(config)
     if not memory:
         return {"error": "No user context available"}
 
@@ -577,7 +576,7 @@ def save_meal_plan(plan_text: str, notes: str = "") -> Dict[str, Any]:
 
 
 @tool
-def get_meal_plan(week_id: Optional[str] = None) -> Dict[str, Any]:
+def get_meal_plan(config: RunnableConfig, week_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Retrieve the stored meal plan for a week. Use it to answer "what's for
     dinner today?", check compliance, or build a grocery/shopping list from
@@ -589,7 +588,7 @@ def get_meal_plan(week_id: Optional[str] = None) -> Dict[str, Any]:
     Returns:
         The stored meal plan, or a message if none exists
     """
-    memory = _get_memory()
+    memory = _get_memory(config)
     if not memory:
         return {"error": "No user context available"}
 
@@ -612,7 +611,7 @@ def get_meal_plan(week_id: Optional[str] = None) -> Dict[str, Any]:
 
 
 @tool
-def generate_weekly_summary() -> Dict[str, Any]:
+def generate_weekly_summary(config: RunnableConfig) -> Dict[str, Any]:
     """
     Aggregate the last 7 daily logs into a weekly summary (average calories,
     compliance, weight change) and store it. Use when the user asks for a
@@ -621,7 +620,7 @@ def generate_weekly_summary() -> Dict[str, Any]:
     Returns:
         The computed weekly statistics
     """
-    memory = _get_memory()
+    memory = _get_memory(config)
     if not memory:
         return {"error": "No user context available"}
 

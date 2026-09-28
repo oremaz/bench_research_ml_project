@@ -40,7 +40,7 @@ def classify_intent(llm, user_message: str, has_profile: bool = True) -> IntentS
     Classify user intent using LLM structured output.
 
     Args:
-        llm: A LangChain LLM instance (e.g., ChatGoogleGenerativeAI)
+        llm: A LangChain LLM instance
         user_message: The user's message to classify
         has_profile: Whether the user has a complete profile
 

@@ -7,7 +7,7 @@ of detected items, calorie estimates, latency, and cost.
 Usage:
     python -m nutricoach.food_vision.compare --image plate.jpg
     python -m nutricoach.food_vision.compare --image-dir ./test_images/
-    python -m nutricoach.food_vision.compare --image plate.jpg --methods vlm_claude,rag_vlm
+    python -m nutricoach.food_vision.compare --image plate.jpg --methods vlm_chain,rag_vlm
 """
 
 import argparse
@@ -17,6 +17,8 @@ import sys
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
+
+from shared.config import OPENROUTER_MODEL_ID
 
 from .base import FoodAnalysisResult, FoodAnalyzer
 
@@ -35,8 +37,8 @@ def get_available_methods() -> Dict[str, type]:
 
     try:
         from .vlm_analyzer import VLMAnalyzer, VLMAnalyzerSingleShot
-        methods["vlm_claude"] = VLMAnalyzer
-        methods["vlm_claude_single"] = VLMAnalyzerSingleShot
+        methods["vlm_chain"] = VLMAnalyzer
+        methods["vlm_single"] = VLMAnalyzerSingleShot
     except ImportError:
         logger.debug("VLM analyzer not available (install openai)")
 
@@ -60,6 +62,7 @@ def run_comparison(
     methods: Optional[List[str]] = None,
     rf_detr_weights: Optional[str] = None,
     openrouter_api_key: Optional[str] = None,
+    model_id: str = OPENROUTER_MODEL_ID,
 ) -> Dict[str, FoodAnalysisResult]:
     """
     Run specified (or all) methods on a single image.
@@ -69,6 +72,7 @@ def run_comparison(
         methods: List of method names to run. None = all available.
         rf_detr_weights: Path to fine-tuned RF-DETR weights.
         openrouter_api_key: API key for OpenRouter (VLM methods).
+        model_id: OpenRouter model for vision methods.
 
     Returns:
         Dict mapping method name to FoodAnalysisResult.
@@ -92,10 +96,14 @@ def run_comparison(
             kwargs = {}
             if name == "rf_detr" and rf_detr_weights:
                 kwargs["model_path"] = rf_detr_weights
-            if name in ("vlm_claude", "vlm_claude_single", "rag_vlm") and openrouter_api_key:
+            if name in ("vlm_chain", "vlm_single", "rag_vlm") and openrouter_api_key:
                 kwargs["api_key"] = openrouter_api_key
+            if name in ("vlm_chain", "vlm_single", "rag_vlm"):
+                kwargs["model"] = model_id
             if name == "clip_ensemble" and openrouter_api_key:
                 kwargs["openrouter_api_key"] = openrouter_api_key
+            if name == "clip_ensemble":
+                kwargs["llm_model"] = model_id
 
             analyzer = cls(**kwargs)
             result = analyzer.analyze(image_path)

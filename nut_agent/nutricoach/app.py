@@ -13,6 +13,7 @@ import os
 import json
 import logging
 import uuid
+import tempfile
 from pathlib import Path
 from datetime import datetime
 
@@ -27,7 +28,7 @@ import pandas as pd
 
 from langchain_core.messages import HumanMessage, AIMessage
 
-from shared.config import SECRETS_DIR, STREAMLIT_CONFIG
+from shared.config import OPENROUTER_MODEL_ID, SECRETS_DIR, STREAMLIT_CONFIG
 from shared.auth import (
     authenticate_user,
     register_user,
@@ -62,6 +63,7 @@ def initialize_session_state():
         "agent_graph": None,
         "thread_id": None,
         "chat_history": [],
+        "vision_model_id": OPENROUTER_MODEL_ID,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -76,7 +78,12 @@ initialize_session_state()
 
 def _thread_config() -> dict:
     """LangGraph config with thread_id for checkpointer."""
-    return {"configurable": {"thread_id": st.session_state.get("thread_id", "default")}}
+    return {"configurable": {
+        "thread_id": st.session_state.get("thread_id", "default"),
+        "username": st.session_state.get("username"),
+        "openrouter_api_key": st.session_state.get("api_key"),
+        "vision_model_id": st.session_state.get("vision_model_id", OPENROUTER_MODEL_ID),
+    }}
 
 
 def invoke_agent(user_message: str) -> str:
@@ -144,24 +151,21 @@ def _ensure_memory_migrated(username):
 def init_agent():
     if st.session_state["agent_graph"] is not None:
         return True
-    env_key = os.environ.get("GOOGLE_API_KEY", "") or os.environ.get("OPENROUTER_API_KEY", "")
-    api_key = st.text_input(
-        "API Key (Google or OpenRouter sk-or-...)",
-        type="password",
-        value=env_key,
-    )
+    api_key = st.text_input("OpenRouter API Key", type="password", value=os.environ.get("OPENROUTER_API_KEY", ""))
+    model_id = st.text_input("OpenRouter model ID", value=os.environ.get("OPENROUTER_MODEL_ID", OPENROUTER_MODEL_ID))
+    st.caption("Default model: [stealth/space-bunny-alpha](https://openrouter.ai/stealth/space-bunny-alpha)")
     if api_key:
         st.session_state["api_key"] = api_key
         username = st.session_state.get("username", "anonymous")
         try:
-            st.session_state["agent_graph"] = build_nutricoach_graph(api_key, username)
+            st.session_state["agent_graph"] = build_nutricoach_graph(api_key, username, model_id=model_id.strip() or OPENROUTER_MODEL_ID)
             st.success("Agent initialized!")
             return True
         except Exception as e:
             st.error(f"Failed to initialize agent: {e}")
             return False
     else:
-        st.warning("Please enter a Google or OpenRouter API key.")
+        st.warning("Please enter your OpenRouter API key.")
         return False
 
 
@@ -245,10 +249,19 @@ def display_chat_interface():
 # --- Food Image Analysis ---
 
 
+def _save_upload(uploaded) -> Path:
+    SECRETS_DIR.mkdir(parents=True, exist_ok=True)
+    suffix = Path(uploaded.name).suffix.lower()
+    with tempfile.NamedTemporaryFile("wb", dir=SECRETS_DIR, suffix=suffix, delete=False) as f:
+        f.write(uploaded.getvalue())
+        return Path(f.name)
+
+
 def display_food_analysis():
     """Tab for analyzing food photos."""
     st.subheader("Analyze Food Photo")
     st.markdown("Upload a photo of your meal to estimate ingredients, portions, and calories.")
+    st.text_input("Vision model ID", key="vision_model_id", help="Choose an OpenRouter model that accepts images.")
 
     uploaded = st.file_uploader("Upload a food image", type=["jpg", "jpeg", "png", "webp"])
 
@@ -260,14 +273,12 @@ def display_food_analysis():
         with col_result:
             if st.button("Analyze with NutriCoach Agent"):
                 if st.session_state["agent_graph"]:
-                    # Save uploaded image temporarily
-                    tmp_path = SECRETS_DIR / f"_tmp_upload_{uploaded.name}"
-                    SECRETS_DIR.mkdir(parents=True, exist_ok=True)
-                    with open(tmp_path, "wb") as f:
-                        f.write(uploaded.getvalue())
-
-                    msg = f"Please analyze this food image and estimate the calories and macros: {tmp_path}"
-                    send_message(msg)
+                    tmp_path = _save_upload(uploaded)
+                    try:
+                        msg = f"Please analyze this food image and estimate the calories and macros: {tmp_path}"
+                        send_message(msg)
+                    finally:
+                        tmp_path.unlink(missing_ok=True)
 
     # Standalone comparison mode
     st.markdown("---")
@@ -276,18 +287,19 @@ def display_food_analysis():
 
     uploaded2 = st.file_uploader("Upload image for comparison", type=["jpg", "jpeg", "png", "webp"], key="compare_upload")
 
-    method_options = ["vlm_claude", "vlm_claude_single", "clip_ensemble", "rag_vlm", "rf_detr"]
-    selected_methods = st.multiselect("Select methods to compare", method_options, default=["vlm_claude", "rag_vlm"])
+    method_options = ["vlm_chain", "vlm_single", "clip_ensemble", "rag_vlm", "rf_detr"]
+    selected_methods = st.multiselect("Select methods to compare", method_options, default=["vlm_chain", "rag_vlm"])
 
     if uploaded2 and selected_methods and st.button("Run Comparison"):
-        tmp_path = SECRETS_DIR / f"_tmp_compare_{uploaded2.name}"
-        with open(tmp_path, "wb") as f:
-            f.write(uploaded2.getvalue())
-
-        with st.spinner("Running comparison..."):
-            try:
+        tmp_path = _save_upload(uploaded2)
+        try:
+            with st.spinner("Running comparison..."):
                 from nutricoach.food_vision.compare import run_comparison, format_comparison
-                results = run_comparison(str(tmp_path), methods=selected_methods)
+                results = run_comparison(
+                    str(tmp_path), methods=selected_methods,
+                    openrouter_api_key=st.session_state.get("api_key"),
+                    model_id=st.session_state["vision_model_id"].strip() or OPENROUTER_MODEL_ID,
+                )
                 st.code(format_comparison(results), language="text")
 
                 # Show per-method details
@@ -302,8 +314,10 @@ def display_food_analysis():
                                     f"({item.calories:.0f} kcal, P:{item.protein_g:.1f}g, "
                                     f"C:{item.carbs_g:.1f}g, F:{item.fat_g:.1f}g)"
                                 )
-            except Exception as e:
-                st.error(f"Comparison failed: {e}")
+        except Exception as e:
+            st.error(f"Comparison failed: {e}")
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
 
 # --- Quick Actions ---
@@ -619,7 +633,7 @@ def main_app():
         display_daily_results()
 
     st.markdown("---")
-    st.caption("NutriCoach v2 — Powered by LangGraph + SqliteSaver, Google Gemini, and Food Vision")
+    st.caption("NutriCoach v2: LangGraph, SqliteSaver, OpenRouter, and Food Vision")
 
 
 # --- Entry Point ---

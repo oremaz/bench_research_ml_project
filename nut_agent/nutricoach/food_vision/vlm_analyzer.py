@@ -1,7 +1,7 @@
 """
 Method 2: Pure vLLM approach via OpenRouter API.
 
-Uses Claude Opus 4.6 with intelligently chained prompts:
+Uses the configured OpenRouter vision model with chained prompts:
   Step 1: Identify all food items visible on the plate
   Step 2: Estimate portion sizes for each item
   Step 3: Compute detailed calorie/macro breakdown
@@ -20,6 +20,8 @@ import os
 import time
 from typing import Optional
 
+from shared.config import OPENROUTER_MODEL_ID
+
 from .base import (
     FoodAnalyzer,
     FoodAnalysisResult,
@@ -27,7 +29,6 @@ from .base import (
     encode_image_to_base64,
     get_image_media_type,
 )
-from shared.config import OPENROUTER_VISION_MODEL, OPENROUTER_VISION_FALLBACKS
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,7 @@ Be precise. Account for cooking oils, sauces, and preparation methods."""
 
 class VLMAnalyzer(FoodAnalyzer):
     """
-    Pure vision-language model approach using Claude Opus via OpenRouter.
+    Pure vision-language model approach via OpenRouter.
 
     Uses a 3-step prompt chain:
     1. Food identification (vision)
@@ -97,16 +98,16 @@ class VLMAnalyzer(FoodAnalyzer):
     3. Nutrition computation (reasoning)
     """
 
-    method_name = "vlm_claude"
+    method_name = "vlm_chain"
 
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = None,
+        model: str = OPENROUTER_MODEL_ID,
         base_url: str = "https://openrouter.ai/api/v1",
     ):
         self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
-        self.model = model or OPENROUTER_VISION_MODEL
+        self.model = model or OPENROUTER_MODEL_ID
         self.base_url = base_url
         self._client = None
 
@@ -130,7 +131,6 @@ class VLMAnalyzer(FoodAnalyzer):
             messages=messages,
             max_tokens=max_tokens,
             temperature=0.1,
-            extra_body={"models": OPENROUTER_VISION_FALLBACKS},
         )
         return response.choices[0].message.content.strip()
 
@@ -260,7 +260,7 @@ class VLMAnalyzerSingleShot(FoodAnalyzer):
     Faster and cheaper but potentially less accurate than the chained approach.
     """
 
-    method_name = "vlm_claude_single"
+    method_name = "vlm_single"
 
     SINGLE_PROMPT = """You are an expert nutritionist. Analyze this meal photo and provide a complete nutritional breakdown.
 
@@ -290,11 +290,11 @@ Be thorough — include sauces, condiments, garnishes, drinks. Use standard nutr
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = None,
+        model: str = OPENROUTER_MODEL_ID,
         base_url: str = "https://openrouter.ai/api/v1",
     ):
         self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
-        self.model = model or OPENROUTER_VISION_MODEL
+        self.model = model or OPENROUTER_MODEL_ID
         self.base_url = base_url
         self._client = None
 
@@ -327,7 +327,6 @@ Be thorough — include sauces, condiments, garnishes, drinks. Use standard nutr
                 }],
                 max_tokens=2000,
                 temperature=0.1,
-                extra_body={"models": OPENROUTER_VISION_FALLBACKS},
             )
 
             raw = response.choices[0].message.content.strip()

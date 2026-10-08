@@ -21,7 +21,7 @@ from langgraph.prebuilt import ToolNode
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
-from shared.config import OPENROUTER_MODEL_ID, SECRETS_DIR
+from shared.config import OPENROUTER_MODEL_ID, OPENROUTER_REASONING_EFFORT, OPENROUTER_MAX_OUTPUT_TOKENS, openrouter_reasoning, SECRETS_DIR
 from shared.memory import MemoryManager
 from nutricoach.tools import ALL_TOOLS
 
@@ -55,7 +55,7 @@ Guidelines:
 - When asked about progress or trends, use the get_progress_summary tool.
 - For an end-of-week review, use generate_weekly_summary.
 - When nutrition targets are needed, use calculate_personalized_nutrition_targets.
-- When the user shares a food photo, use the analyze_food_image tool.
+- When the user shares a food photo, use the analyze_food_image tool, which uses Single-shot VLM.
 - After the user accepts a meal plan, save it with save_meal_plan. Use get_meal_plan
   to check today's planned meals or to build a grocery list from the plan.
 - Food photo values are estimates. Do not log a photo analysis unless the user explicitly asks to log it.
@@ -82,6 +82,7 @@ def build_nutricoach_graph(
     username: str,
     use_checkpointer: bool = True,
     model_id: str = OPENROUTER_MODEL_ID,
+    reasoning_effort: str = OPENROUTER_REASONING_EFFORT,
 ) -> Any:
     """
     Build and return the NutriCoach LangGraph agent.
@@ -100,6 +101,8 @@ def build_nutricoach_graph(
         model=model_id,
         api_key=openrouter_api_key,
         base_url="https://openrouter.ai/api/v1",
+        extra_body=openrouter_reasoning(reasoning_effort),
+        max_tokens=OPENROUTER_MAX_OUTPUT_TOKENS,
     )
     llm_with_tools = llm.bind_tools(ALL_TOOLS)
 

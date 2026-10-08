@@ -78,6 +78,8 @@ class FoodAnalysisResult:
                 f"({f.calories:.0f} kcal, P:{f.protein_g:.1f}g, "
                 f"C:{f.carbs_g:.1f}g, F:{f.fat_g:.1f}g)"
             )
+            if f.portion_description:
+                lines.append(f"    {f.portion_description}")
         lines.append(
             f"  TOTAL: {self.total_calories:.0f} kcal, "
             f"P:{self.total_protein_g:.1f}g, C:{self.total_carbs_g:.1f}g, "

@@ -1,5 +1,5 @@
 """
-ML-powered recipe analysis using text embeddings and trained LightGBM models.
+ML-powered recipe analysis using local classifiers and OpenRouter.
 
 Embeddings are computed locally with a sentence-transformers model (GPU when
 available) so that training and inference share the exact same text encoder.
@@ -16,8 +16,13 @@ from typing import Dict, Any, List, Union, Optional
 from pathlib import Path
 from openai import OpenAI
 
-from recipe_lab.local_models import NUTRIENT_TARGETS, load_or_train_models
-from shared.config import OPENROUTER_MODEL_ID
+from recipe_lab.local_models import (
+    EMBEDDING_MODEL_ID,
+    EMBEDDING_MODEL_REVISION,
+    _adapt_lfm_shortconv,
+    load_or_train_models,
+)
+from shared.config import OPENROUTER_MODEL_ID, OPENROUTER_REASONING_EFFORT, OPENROUTER_MAX_OUTPUT_TOKENS, openrouter_reasoning
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.append(str(REPO_ROOT))
@@ -40,11 +45,9 @@ DEFAULT_TASKS = {
     "difficulty": {"path_start": "difficulty_train", "labels": ["Easy", "More effort"]},
     "meal_type": {"path_start": "meal_train", "labels": ["Breakfast", "Lunch/Dinner"]},
     "time_class": {"path_start": "total_time_train", "labels": ["<15 min", "15-30 min", "30-60 min", ">60 min"]},
-    "nutrients": {
-        "path_start": "nutrients_train",
-        "targets": ["kcal", "fat", "saturates", "carbs", "sugars", "fibre", "protein", "salt"],
-    },
 }
+
+NUTRIENT_TARGETS = ("kcal", "fat", "saturates", "carbs", "sugars", "fibre", "protein", "salt")
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -61,6 +64,10 @@ class LocalEmbedder:
     def is_jina(self) -> bool:
         return JINA_MODEL_TAG in self.model_name
 
+    @property
+    def is_lfm(self) -> bool:
+        return self.model_name == EMBEDDING_MODEL_ID
+
     def _load(self):
         if self._model is None:
             import torch
@@ -76,7 +83,14 @@ class LocalEmbedder:
                     "trust_remote_code": True,
                     "model_kwargs": {"default_task": "classification"},
                 }
+            elif self.is_lfm:
+                kwargs = {
+                    "revision": EMBEDDING_MODEL_REVISION,
+                    "trust_remote_code": True,
+                }
             self._model = SentenceTransformer(self.model_name, device=self.device, **kwargs)
+            if self.is_lfm:
+                _adapt_lfm_shortconv(self._model)
         return self._model
 
     def embed(self, texts: Union[str, List[str]], batch_size: int = 64) -> np.ndarray:
@@ -86,62 +100,26 @@ class LocalEmbedder:
         if self.is_jina:
             inputs = [JINA_DOC_PREFIX + t for t in inputs]
             batch_size = min(batch_size, 16)
+        encode_kwargs = {}
+        if self.is_lfm:
+            encode_kwargs["prompt_name"] = "document"
+            batch_size = min(batch_size, 16)
         emb = model.encode(
-            inputs,
-            batch_size=batch_size,
-            normalize_embeddings=True,
-            show_progress_bar=False,
+            inputs, batch_size=batch_size, normalize_embeddings=True,
+            show_progress_bar=False, **encode_kwargs,
         )
         emb = np.asarray(emb, dtype=np.float32)
         return emb[0] if single else emb
 
 
-class HFNutrientRegressor:
-    """Fine-tuned bge-base regression head predicting per-serving nutrients
-    from raw recipe text (see ml_pipeline/train_recipe_models.py)."""
-
-    def __init__(self, model_dir: Union[str, Path], device: Optional[str] = None):
-        self.model_dir = Path(model_dir)
-        self.device = device
-        self._model = None
-        self._tok = None
-        with open(self.model_dir / "regressor_meta.json") as f:
-            meta = json.load(f)
-        self.targets = meta["targets"]
-        self.mu = np.array(meta["mu"], dtype=np.float64)
-        self.sd = np.array(meta["sd"], dtype=np.float64)
-        self.max_len = meta.get("max_len", 512)
-
-    def _load(self):
-        if self._model is None:
-            import torch
-            from transformers import AutoModelForSequenceClassification, AutoTokenizer
-
-            if self.device is None:
-                self.device = "cuda" if torch.cuda.is_available() else "cpu"
-            self._tok = AutoTokenizer.from_pretrained(self.model_dir)
-            self._model = AutoModelForSequenceClassification.from_pretrained(
-                self.model_dir).to(self.device).eval()
-
-    def predict(self, text: str) -> np.ndarray:
-        import torch
-
-        self._load()
-        enc = self._tok(text, truncation=True, max_length=self.max_len,
-                        padding=True, return_tensors="pt").to(self.device)
-        with torch.no_grad():
-            out = self._model(**enc).logits.cpu().numpy()[0]
-        return out * self.sd + self.mu
-
-
 class FoodModelPredictor:
     """
     Wrapper class to load and use the trained food prediction models with text embeddings.
-    Supports: difficulty, meal type, time class, and per-serving nutrient prediction.
+    Supports local classification and zero-shot per-serving nutrition estimation.
     """
 
     def __init__(self, models_path: str = None, api_key: str = None, device: Optional[str] = None,
-                 model_id: str = OPENROUTER_MODEL_ID):
+                 model_id: str = OPENROUTER_MODEL_ID, reasoning_effort: str = OPENROUTER_REASONING_EFFORT):
         if models_path is None:
             models_path = REPO_ROOT / "ml_pipeline" / "results"
         self.models_path = Path(models_path)
@@ -160,22 +138,17 @@ class FoodModelPredictor:
 
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         self.model_id = model_id
+        self.reasoning_effort = reasoning_effort
         self.client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=self.api_key) if self.api_key else None
         self.local_encoder = None
         self.local_models = {}
-        self.nutrients_uses_local = False
 
         self.difficulty_pipeline = None
         self.meal_type_pipeline = None
         self.time_class_pipeline = None
-        self.nutrients_pipeline = None
-        self.nutrients_hf = None
-        self._device = device
-
         self.difficulty_labels = self.tasks["difficulty"]["labels"]
         self.meal_type_labels = self.tasks["meal_type"]["labels"]
         self.time_class_labels = self.tasks["time_class"]["labels"]
-        self.nutrient_targets = self.tasks.get("nutrients", DEFAULT_TASKS["nutrients"])["targets"]
 
         if self.legacy_compatible:
             self._load_models()
@@ -186,11 +159,6 @@ class FoodModelPredictor:
                     setattr(self, f"{task}_pipeline", GeneralPipelineSklearn(
                         model=self.local_models[task], task_type="classification"))
                     setattr(self, f"{task}_labels", list(self.local_models[task].classes_))
-            if self.nutrients_hf is None and self.nutrients_pipeline is None and "nutrients" in self.local_models:
-                self.nutrients_pipeline = GeneralPipelineSklearn(
-                    model=self.local_models["nutrients"], task_type="regression")
-                self.nutrient_targets = list(NUTRIENT_TARGETS)
-                self.nutrients_uses_local = True
             self.embedding_dim = 1024
         except Exception:
             if any(getattr(self, attr) is None for attr in
@@ -218,11 +186,10 @@ class FoodModelPredictor:
 
     def _task_model_name(self, task: str) -> str:
         """Per-task model family from meta, falling back to the global name."""
-        default_key = "nutrients_model_name" if task == "nutrients" else "model_name"
-        return self.tasks[task].get("model_name", self.meta.get(default_key, "lightgbm"))
+        return self.tasks[task].get("model_name", self.meta.get("model_name", "lightgbm"))
 
     def _load_models(self):
-        """Load the trained models for difficulty, meal type, time class, and nutrients."""
+        """Load the trained classification models."""
         for attr, task in [
             ("difficulty_pipeline", "difficulty"),
             ("meal_type_pipeline", "meal_type"),
@@ -242,28 +209,6 @@ class FoodModelPredictor:
             except Exception as e:
                 logging.error(f"Error loading {task} model: {e}")
 
-        if "nutrients" in self.tasks:
-            model_dir = self.tasks["nutrients"].get("model_dir")
-            if model_dir and (self.models_path / model_dir).exists():
-                try:
-                    self.nutrients_hf = HFNutrientRegressor(
-                        self.models_path / model_dir, device=self._device)
-                except Exception as e:
-                    logging.error(f"Error loading fine-tuned nutrients model: {e}")
-            try:
-                nutrients_model_name = self._task_model_name("nutrients")
-                path_start = str(self.models_path / self.tasks["nutrients"]["path_start"])
-                model = load_model_by_name(
-                    self._registry_class(nutrients_model_name, "regression"),
-                    nutrients_model_name,
-                    {},
-                    path_start=path_start,
-                    task_type="regression",
-                )
-                self.nutrients_pipeline = GeneralPipelineSklearn(model=model, task_type="regression")
-            except Exception as e:
-                logging.error(f"Error loading nutrients model: {e}")
-
     # --- LLM helpers ---
 
     def _generate_text(self, prompt: str) -> Optional[str]:
@@ -273,7 +218,8 @@ class FoodModelPredictor:
                 response = self.client.chat.completions.create(
                     model=self.model_id,
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=1500,
+                    max_tokens=OPENROUTER_MAX_OUTPUT_TOKENS,
+                    extra_body=openrouter_reasoning(self.reasoning_effort),
                     temperature=0.3,
                 )
                 return response.choices[0].message.content
@@ -354,8 +300,7 @@ class FoodModelPredictor:
     def get_text_embedding(self, text: str, task_type: str = "classification") -> List[float]:
         """Embed text with the same local encoder used at training time."""
         try:
-            if self.local_encoder is not None and (task_type == "classification" or
-                                                   (task_type == "regression" and self.nutrients_uses_local)):
+            if self.local_encoder is not None:
                 return self.local_encoder.encode(
                     [text], prompt_name="document", normalize_embeddings=True,
                 )[0].tolist()
@@ -428,53 +373,36 @@ class FoodModelPredictor:
         except Exception as e:
             return {"prediction": "Unknown", "confidence": 0.0, "error": str(e)}
 
-    def predict_nutrients_from_embedding(self, embedding: List[float]) -> Dict[str, Any]:
-        """Predict per-serving nutrient values (kcal, fat, ...) from text embedding."""
-        if self.nutrients_pipeline is None:
-            return {"error": "Model not loaded"}
+    def estimate_nutrients_zero_shot(self, text: str) -> Dict[str, Any]:
+        """Estimate per-serving nutrition directly with the configured OpenRouter LLM."""
+        if not self.client:
+            return {"error": "OpenRouter API key required for nutrition estimation"}
+        prompt = f"""
+Estimate the nutrition per serving for the recipe below. Infer realistic ingredient
+quantities and serving count when they are missing. Return only one raw JSON object
+with exactly these numeric, non-negative fields: kcal, fat, saturates, carbs,
+sugars, fibre, protein, salt. kcal is in kcal and every other value is in grams.
+Do not include units, ranges, markdown, commentary, or extra fields.
+
+Recipe:
+{text}
+"""
+        raw_text = self._generate_text(prompt)
+        if not raw_text:
+            return {"error": "OpenRouter nutrition estimation failed"}
         try:
-            embedding_array = np.array(embedding).reshape(1, -1)
-            preds = np.asarray(self.nutrients_pipeline.model.predict(embedding_array))
-            preds = np.clip(preds.reshape(-1), 0, None)
-            return {
-                "per_serving": {
-                    t: round(float(v), 1) for t, v in zip(self.nutrient_targets, preds)
-                }
+            payload = json.loads(raw_text[raw_text.find("{"):raw_text.rfind("}") + 1])
+            values = {
+                target: round(max(0.0, float(payload[target])), 1)
+                for target in NUTRIENT_TARGETS
             }
-        except Exception as e:
-            return {"error": str(e)}
-
-    def predict_nutrients_from_text(self, text: str,
-                                    embedding: Optional[List[float]] = None) -> Dict[str, Any]:
-        """Predict per-serving nutrients from recipe text.
-
-        Uses the fine-tuned bge regression head when available (much better
-        test MAE than embedding-based regression), else the registry model
-        on the provided or freshly computed embedding.
-        """
-        if self.nutrients_hf is not None:
-            try:
-                preds = np.clip(self.nutrients_hf.predict(text), 0, None)
-                return {
-                    "per_serving": {
-                        t: round(float(v), 1)
-                        for t, v in zip(self.nutrients_hf.targets, preds)
-                    },
-                    "method": "bge_finetune",
-                }
-            except Exception as e:
-                logger.warning("Fine-tuned nutrients prediction failed: %s", e)
-        if embedding is None:
-            embedding = self.get_text_embedding(text)
-        elif getattr(self, "local_encoder", None) is not None:
-            embedding = self.get_text_embedding(text, task_type="regression")
-        result = self.predict_nutrients_from_embedding(embedding)
-        if "per_serving" in result:
-            result["method"] = "lightgbm_lfm2.5" if getattr(self, "nutrients_uses_local", False) else self._task_model_name("nutrients")
-        return result
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            logger.warning("Invalid OpenRouter nutrition response: %s", exc)
+            return {"error": "OpenRouter returned an invalid nutrition estimate"}
+        return {"per_serving": values, "method": "openrouter_zero_shot"}
 
     def analyze_recipe(self, recipe_description: str) -> Dict[str, Any]:
-        """Perform complete analysis: enhance -> embed -> predict difficulty/meal_type/time_class/nutrients."""
+        """Analyze a recipe with local classifiers and zero-shot LLM nutrition."""
         try:
             enhanced_recipe = self.enhance_recipe_description(recipe_description)
             formatted_text = self.format_recipe_text(enhanced_recipe)
@@ -485,8 +413,7 @@ class FoodModelPredictor:
                 "difficulty": self.predict_difficulty_from_embedding(class_embedding),
                 "meal_type": self.predict_meal_type_from_embedding(class_embedding),
                 "time_class": self.predict_time_class_from_embedding(class_embedding),
-                "nutrients": self.predict_nutrients_from_text(
-                    formatted_text, embedding=class_embedding),
+                "nutrients": self.estimate_nutrients_zero_shot(formatted_text),
             }
         except Exception as e:
             return {

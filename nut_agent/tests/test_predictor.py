@@ -24,9 +24,9 @@ def _make_predictor_stub():
     predictor = FoodModelPredictor.__new__(FoodModelPredictor)
     predictor.client = None
     predictor.api_key = None
-    predictor.model_id = "stealth/space-bunny-alpha"
+    predictor.model_id = "dots-studio/dots-3-note-preview:free"
+    predictor.reasoning_effort = "high"
     predictor.local_encoder = None
-    predictor.nutrients_uses_local = False
     predictor.models_path = Path("/fake")
     predictor.meta = {}
     predictor.tasks = DEFAULT_TASKS
@@ -37,12 +37,9 @@ def _make_predictor_stub():
     predictor.difficulty_pipeline = None
     predictor.meal_type_pipeline = None
     predictor.time_class_pipeline = None
-    predictor.nutrients_pipeline = None
-    predictor.nutrients_hf = None
     predictor.difficulty_labels = DEFAULT_TASKS["difficulty"]["labels"]
     predictor.meal_type_labels = DEFAULT_TASKS["meal_type"]["labels"]
     predictor.time_class_labels = DEFAULT_TASKS["time_class"]["labels"]
-    predictor.nutrient_targets = DEFAULT_TASKS["nutrients"]["targets"]
     return predictor
 
 
@@ -154,47 +151,21 @@ class TestPredictWithMockModel:
         assert result["prediction"] == "30-60 min"
         assert "all_probabilities" in result
 
-    def test_predict_nutrients(self):
+    def test_zero_shot_nutrients(self):
         p = _make_predictor_stub()
-        mock_pipeline = MagicMock()
-        mock_pipeline.model.predict.return_value = np.array(
-            [[420.0, 12.0, 4.0, 55.0, 8.0, 6.0, 22.0, -0.2]]
-        )
-        p.nutrients_pipeline = mock_pipeline
-
-        result = p.predict_nutrients_from_embedding([0.5] * EMBEDDING_DIM)
-        per_serving = result["per_serving"]
-        assert per_serving["kcal"] == 420.0
-        assert per_serving["salt"] == 0.0
-        assert list(per_serving) == p.nutrient_targets
-
-    def test_predict_nutrients_without_model(self):
-        p = _make_predictor_stub()
-        result = p.predict_nutrients_from_embedding([0.0] * EMBEDDING_DIM)
-        assert result["error"] == "Model not loaded"
-
-    def test_predict_nutrients_from_text_prefers_finetune(self):
-        p = _make_predictor_stub()
-        hf = MagicMock()
-        hf.predict.return_value = np.array([500.0, 20.0, 8.0, 60.0, 10.0, 5.0, 25.0, 1.2])
-        hf.targets = DEFAULT_TASKS["nutrients"]["targets"]
-        p.nutrients_hf = hf
-
-        result = p.predict_nutrients_from_text("name: pizza ingredients: dough steps: bake")
-        assert result["method"] == "bge_finetune"
-        assert result["per_serving"]["kcal"] == 500.0
-
-    def test_predict_nutrients_from_text_falls_back_to_registry(self):
-        p = _make_predictor_stub()
-        mock_pipeline = MagicMock()
-        mock_pipeline.model.predict.return_value = np.array(
-            [[300.0, 10.0, 3.0, 40.0, 6.0, 4.0, 15.0, 0.5]]
-        )
-        p.nutrients_pipeline = mock_pipeline
-
-        result = p.predict_nutrients_from_text("text", embedding=[0.5] * EMBEDDING_DIM)
+        p.client = MagicMock()
+        p._generate_text = MagicMock(return_value=(
+            '{"kcal":300,"fat":10,"saturates":3,"carbs":40,'
+            '"sugars":6,"fibre":4,"protein":15,"salt":0.5}'
+        ))
+        result = p.estimate_nutrients_zero_shot("text")
         assert result["per_serving"]["kcal"] == 300.0
-        assert result["method"] == "lightgbm"
+        assert result["method"] == "openrouter_zero_shot"
+
+    def test_zero_shot_nutrients_requires_openrouter(self):
+        p = _make_predictor_stub()
+        result = p.estimate_nutrients_zero_shot("text")
+        assert "API key required" in result["error"]
 
 
 class TestAnalyzeRecipe:
@@ -281,7 +252,6 @@ def test_training_embeddings_are_cached(tmp_path, monkeypatch):
         "difficult": ["Easy", "More effort", "Easy"],
         "subcategory": ["Breakfast recipes", "Dinner recipes", "Lunch recipes"],
         "times": ["{'Preparation': '10 mins'}", "{'Cooking': '20 mins'}", "{'Cooking': '40 mins'}"],
-        "nutrients": [None, None, None],
     }).to_csv(data_path, index=False)
     encoder = MagicMock()
     encoder.encode.return_value = np.ones((3, 4), dtype=np.float32)

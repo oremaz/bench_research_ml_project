@@ -91,8 +91,17 @@ MACRO_RATIOS = {
 WATER_ML_PER_KG = 35  # ml per kg body weight
 
 # LLM configurations
-OPENROUTER_MODEL_ID = "stealth/space-bunny-alpha"
+OPENROUTER_MODEL_ID = "dots-studio/dots-3-note-preview:free"
+OPENROUTER_REASONING_EFFORT = "high"
+OPENROUTER_REASONING_EFFORTS = ("low", "medium", "high", "xhigh", "max")
+OPENROUTER_MAX_OUTPUT_TOKENS = 8192
 MAX_RECURSION_LIMIT = 50
+
+
+def openrouter_reasoning(reasoning_effort: str = OPENROUTER_REASONING_EFFORT) -> dict:
+    if reasoning_effort not in OPENROUTER_REASONING_EFFORTS:
+        raise ValueError(f"Unsupported reasoning effort: {reasoning_effort}")
+    return {"reasoning": {"effort": reasoning_effort}}
 
 # Streamlit configurations
 STREAMLIT_CONFIG = {

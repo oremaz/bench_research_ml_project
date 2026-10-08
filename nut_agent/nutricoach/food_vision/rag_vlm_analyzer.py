@@ -1,20 +1,20 @@
 """
-Method 4: RAG-Enhanced VLM (DietAI24-inspired).
-
-Inspired by DietAI24 (Nature 2025), this method grounds VLM food analysis
-in a structured nutrition database using retrieval-augmented generation.
+Method 4: VLM analysis with retrieved local nutrition references.
 
 Pipeline:
   1. VLM identifies food items from the image
-  2. For each item, retrieve top nutrition DB matches (semantic search)
+  2. Retrieve per-100g nutrition references using exact/fuzzy name matching
   3. VLM reasons over image + retrieved nutrition data to produce final estimates
-  4. Cross-validate portions against known serving size standards
+  4. Apply heuristic limits based on hard-coded serving ranges
 
-This approach reduces hallucination in calorie estimates by grounding
-the LLM's reasoning in real nutrition data.
+The VLM receives the image in both API calls and generates the final nutrients.
+Retrieval does not use embeddings; use_embeddings currently has no effect.
+Missing matches fall back to model knowledge. When the portion heuristic changes
+grams, nutrients are scaled by the same ratio to preserve internal consistency.
+Providing references does not establish improved nutrition or portion accuracy.
 
 Requires:
-  pip install openai sentence-transformers
+  pip install openai
   OPENROUTER_API_KEY env var
 """
 
@@ -24,7 +24,7 @@ import os
 import time
 from typing import Dict, List, Optional, Tuple
 
-from shared.config import OPENROUTER_MODEL_ID
+from shared.config import OPENROUTER_MODEL_ID, OPENROUTER_REASONING_EFFORT, OPENROUTER_MAX_OUTPUT_TOKENS, openrouter_reasoning
 
 from .base import (
     FoodAnalyzer,
@@ -33,36 +33,14 @@ from .base import (
     encode_image_to_base64,
     get_image_media_type,
 )
-from .nutrition_db import NutritionDB, FOOD_DB, NutrientInfo
+from .nutrition_db import NutritionDB, FOOD_DB, NutrientInfo, STANDARD_SERVINGS
 
 logger = logging.getLogger(__name__)
-
-# Standard serving sizes for cross-validation (grams)
-STANDARD_SERVINGS: Dict[str, Tuple[float, float]] = {
-    # (typical_min_g, typical_max_g) for one serving
-    "chicken breast": (120, 220),
-    "beef steak": (150, 250),
-    "salmon": (120, 200),
-    "rice": (130, 250),
-    "pasta": (140, 250),
-    "bread": (25, 50),
-    "broccoli": (70, 150),
-    "salad": (80, 200),
-    "pizza": (100, 150),  # per slice
-    "soup": (200, 350),
-    "egg": (45, 60),
-    "cheese": (20, 40),
-    "potato": (100, 200),
-    "fruit": (80, 180),
-}
 
 
 class RAGVLMAnalyzer(FoodAnalyzer):
     """
-    RAG-enhanced VLM for food analysis, inspired by DietAI24.
-
-    Grounds calorie estimates in a real nutrition database to reduce
-    hallucination and improve accuracy.
+    VLM food analysis with exact/fuzzy nutrition lookup in the prompt.
     """
 
     method_name = "rag_vlm"
@@ -72,9 +50,11 @@ class RAGVLMAnalyzer(FoodAnalyzer):
         api_key: Optional[str] = None,
         model: str = OPENROUTER_MODEL_ID,
         use_embeddings: bool = False,
+        reasoning_effort: str = OPENROUTER_REASONING_EFFORT,
     ):
         self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
         self.model = model or OPENROUTER_MODEL_ID
+        self.reasoning_effort = reasoning_effort
         self.use_embeddings = use_embeddings
         self.nutrition_db = NutritionDB()
         self._client = None
@@ -135,13 +115,16 @@ class RAGVLMAnalyzer(FoodAnalyzer):
 
     def _cross_validate_portions(self, items: List[dict]) -> List[dict]:
         """
-        Cross-validate estimated portions against standard serving sizes.
-        Flags unrealistic estimates.
+        Adjust extreme gram estimates using hard-coded serving ranges.
+        Scale nutrients proportionally when a weight is adjusted.
         """
         validated = []
         for item in items:
             name = item.get("name", "").lower()
-            grams = item.get("quantity_grams", 150)
+            original_grams = float(item.get("quantity_grams", 150))
+            if original_grams <= 0:
+                raise ValueError("Estimated portions must be positive")
+            grams = original_grams
 
             # Check against standard servings
             warning = None
@@ -157,6 +140,8 @@ class RAGVLMAnalyzer(FoodAnalyzer):
 
             item["quantity_grams"] = grams
             if warning:
+                for field in ("calories", "protein_g", "carbs_g", "fat_g"):
+                    item[field] = float(item.get(field, 0)) * grams / original_grams
                 item["portion_warning"] = warning
                 logger.info("Portion validation: %s - %s", name, warning)
 
@@ -192,7 +177,8 @@ Return ONLY a JSON array of strings: ["item1", "item2", ...]"""
                         {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}},
                     ],
                 }],
-                max_tokens=500,
+                max_tokens=OPENROUTER_MAX_OUTPUT_TOKENS,
+                extra_body=openrouter_reasoning(self.reasoning_effort),
                 temperature=0.1,
             )
 
@@ -250,7 +236,8 @@ Return ONLY a JSON array:
                         {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}},
                     ],
                 }],
-                max_tokens=2000,
+                max_tokens=OPENROUTER_MAX_OUTPUT_TOKENS,
+                extra_body=openrouter_reasoning(self.reasoning_effort),
                 temperature=0.1,
             )
 
@@ -263,7 +250,7 @@ Return ONLY a JSON array:
                 result.elapsed_seconds = time.time() - start
                 return result
 
-            # Step 4: Cross-validate portions
+            # Step 4: Apply portion heuristics
             items = self._cross_validate_portions(items)
 
             # Build FoodItems

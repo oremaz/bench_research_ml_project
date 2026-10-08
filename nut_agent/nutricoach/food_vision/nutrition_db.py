@@ -8,6 +8,8 @@ Can be extended with USDA FoodData Central or CIQUAL data.
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 import difflib
+import math
+import re
 
 
 @dataclass
@@ -17,6 +19,15 @@ class NutrientInfo:
     protein_g: float
     carbs_g: float
     fat_g: float
+
+    def scaled(self, quantity_grams: float) -> dict:
+        values = {name: float(value) for name, value in vars(self).items()}
+        grams = float(quantity_grams)
+        if not math.isfinite(grams) or grams <= 0:
+            raise ValueError("Quantity must be finite and positive")
+        if any(not math.isfinite(value) or value < 0 for value in values.values()):
+            raise ValueError("Nutrients must be finite and nonnegative")
+        return {name: value * grams / 100 for name, value in values.items()}
 
 
 # Common foods database — values per 100g
@@ -158,6 +169,36 @@ FOOD_DB: Dict[str, NutrientInfo] = {
 }
 
 
+# Hard-coded serving ranges for portion heuristics (grams)
+STANDARD_SERVINGS: Dict[str, Tuple[float, float]] = {
+    # (typical_min_g, typical_max_g) for one serving
+    "chicken breast": (120, 220),
+    "beef steak": (150, 250),
+    "salmon": (120, 200),
+    "rice": (130, 250),
+    "pasta": (140, 250),
+    "bread": (25, 50),
+    "broccoli": (70, 150),
+    "salad": (80, 200),
+    "pizza": (100, 150),  # per slice
+    "soup": (200, 350),
+    "egg": (45, 60),
+    "cheese": (20, 40),
+    "potato": (100, 200),
+    "fruit": (80, 180),
+}
+
+
+
+def default_portion_grams(food_name: str) -> float:
+    """Return an assumed serving weight, not a visual mass estimate."""
+    name = food_name.lower().strip()
+    for key, (minimum, maximum) in STANDARD_SERVINGS.items():
+        if key in name:
+            return (minimum + maximum) / 2
+    return 150.0
+
+
 class NutritionDB:
     """Lookup nutritional info for food items with fuzzy matching."""
 
@@ -187,6 +228,24 @@ class NutritionDB:
         if matches:
             return matches[0], self.db[matches[0]]
         return None, None
+
+    def search_candidates(self, queries, limit: int = 5) -> list:
+        """Shortlist exact, token-overlap, and fuzzy matches for later selection."""
+        queries = [query.lower().strip() for query in queries if isinstance(query, str) and query.strip()]
+        ranked = []
+        for name in self._names:
+            tokens = set(re.findall(r"[a-z0-9]+", name))
+            scores = []
+            for query in queries:
+                query_tokens = set(re.findall(r"[a-z0-9]+", query))
+                overlap = len(tokens & query_tokens) / max(1, len(tokens | query_tokens))
+                fuzzy = difflib.SequenceMatcher(None, query, name).ratio()
+                if overlap or fuzzy >= 0.6:
+                    scores.append(2 * (query == name) + overlap + 0.25 * fuzzy)
+            if scores:
+                ranked.append((max(scores), name))
+        ranked.sort(key=lambda pair: (-pair[0], pair[1]))
+        return [{"name": name, "per_100g": vars(self.db[name])} for _, name in ranked[:limit]]
 
     def enrich_food_item(self, name: str, quantity_grams: float) -> dict:
         """Return calorie/macro estimates for a given food and quantity."""

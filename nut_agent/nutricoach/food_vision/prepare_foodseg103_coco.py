@@ -6,12 +6,13 @@ Bounding boxes are derived per class from connected components of the semantic
 mask (components below MIN_AREA_FRAC of the image are dropped as noise).
 Output layout matches what rfdetr expects:
 
-    ml_pipeline/data/foodseg103_coco/
+    nut_agent/nutricoach/food_vision/data/foodseg103_coco/
       train/  *.jpg + _annotations.coco.json
       valid/  *.jpg + _annotations.coco.json
 
 Run:
-    PYTHONPATH=. uv run python ml_pipeline/prepare_foodseg103_coco.py
+    PYTHONPATH=. uv run python \
+        nut_agent/nutricoach/food_vision/prepare_foodseg103_coco.py
 """
 
 import json
@@ -20,7 +21,8 @@ from pathlib import Path
 import numpy as np
 from scipy import ndimage
 
-OUT_DIR = Path(__file__).parent / "data" / "foodseg103_coco"
+FOOD_VISION_DIR = Path(__file__).parent
+OUT_DIR = FOOD_VISION_DIR / "data" / "foodseg103_coco"
 DATASET = "EduardoPacheco/FoodSeg103"
 MIN_AREA_FRAC = 0.002
 VALID_MAX_IMAGES = 500

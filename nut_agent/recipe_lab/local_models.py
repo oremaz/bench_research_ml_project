@@ -2,8 +2,10 @@
 
 import ast
 import hashlib
+import inspect
 import os
 import re
+import sys
 import tempfile
 from pathlib import Path
 
@@ -16,12 +18,31 @@ from shared.config import SECRETS_DIR
 
 EMBEDDING_MODEL_ID = "LiquidAI/LFM2.5-Embedding-350M"
 EMBEDDING_MODEL_REVISION = "f35ae2c91d687658dbf1f2b449382f0b019b9808"
-CACHE_VERSION = "3"
+CACHE_VERSION = "4"
 DATA_PATH = Path(__file__).resolve().parents[2] / "ml_pipeline" / "recipes_df.csv"
 CACHE_DIR = SECRETS_DIR / "recipe_lab_cache"
 MEAL_TYPES = {"Breakfast recipes": "breakfast", "Lunch recipes": "lunch/dinner", "Dinner recipes": "lunch/dinner"}
 TIME_LABELS = ("<15 min", "15-30 min", "30-60 min", ">60 min")
-NUTRIENT_TARGETS = ("kcal", "fat", "saturates", "carbs", "sugars", "fibre", "protein", "salt")
+LIGHTGBM_THREADS = 1 if sys.platform == "darwin" else 4
+
+
+def _adapt_lfm_shortconv(encoder) -> None:
+    from transformers.models.lfm2.modeling_lfm2 import Lfm2ShortConv
+
+    for module in encoder.modules():
+        if not isinstance(module, Lfm2ShortConv):
+            continue
+        slow_forward = module.slow_forward
+        if "seq_idx" in inspect.signature(slow_forward).parameters:
+            continue
+
+        def compatible_forward(*args, _slow_forward=slow_forward, **kwargs):
+            seq_idx = kwargs.pop("seq_idx", None)
+            if seq_idx is not None:
+                raise ValueError("Packed sequences are unsupported by this LFM2.5 embedding model")
+            return _slow_forward(*args, **kwargs)
+
+        module.slow_forward = compatible_forward
 
 
 def _cache_key(data_path: Path) -> str:
@@ -77,11 +98,12 @@ def load_or_train_models(data_path: Path = DATA_PATH, cache_dir: Path = CACHE_DI
         revision=EMBEDDING_MODEL_REVISION,
         trust_remote_code=True,
     )
+    _adapt_lfm_shortconv(encoder)
 
     if model_path.exists():
         return encoder, joblib.load(model_path)
 
-    data = pd.read_csv(data_path, usecols=["recipe_text", "difficult", "subcategory", "times", "nutrients"])
+    data = pd.read_csv(data_path, usecols=["recipe_text", "difficult", "subcategory", "times"])
     if embedding_path.exists():
         with np.load(embedding_path) as cached:
             embeddings = cached["embeddings"]
@@ -105,19 +127,6 @@ def load_or_train_models(data_path: Path = DATA_PATH, cache_dir: Path = CACHE_DI
     valid_time = minutes > 0
     time_bins = np.searchsorted([15, 30, 60], minutes[valid_time], side="right")
     models["time_class"] = _fit(embeddings[valid_time], np.asarray(TIME_LABELS)[time_bins])
-    nutrient_values = data["nutrients"].map(_parse_nutrients)
-    valid_nutrients = nutrient_values.notna().to_numpy()
-    if valid_nutrients.any():
-        from lightgbm import LGBMRegressor
-        from sklearn.multioutput import MultiOutputRegressor
-
-        targets = np.asarray(nutrient_values[valid_nutrients].tolist(), dtype=np.float32)
-        model = MultiOutputRegressor(LGBMRegressor(
-            n_estimators=120, learning_rate=0.05, num_leaves=15,
-            random_state=42, verbosity=-1, n_jobs=4,
-        ))
-        model.fit(embeddings[valid_nutrients], targets)
-        models["nutrients"] = model
     _save_atomic(model_path, lambda path: joblib.dump(models, path))
     return encoder, models
 
@@ -133,22 +142,6 @@ def _fit(embeddings: np.ndarray, labels):
     if len(set(labels)) < 2:
         raise ValueError("At least two labeled classes are required to train LightGBM")
     model = LGBMClassifier(n_estimators=120, learning_rate=0.05, num_leaves=15,
-                           class_weight="balanced", random_state=42, verbosity=-1, n_jobs=4)
+                           class_weight="balanced", random_state=42, verbosity=-1, n_jobs=LIGHTGBM_THREADS)
     model.fit(embeddings, labels)
     return model
-
-
-def _parse_nutrients(value):
-    try:
-        data = ast.literal_eval(value) if isinstance(value, str) else value
-    except (ValueError, SyntaxError, TypeError):
-        return None
-    if not isinstance(data, dict):
-        return None
-    values = []
-    for target in NUTRIENT_TARGETS:
-        match = re.search(r"(-?\d+\.?\d*)", str(data.get(target, "")))
-        if not match:
-            return None
-        values.append(float(match.group(1)))
-    return values

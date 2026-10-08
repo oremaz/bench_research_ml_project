@@ -19,6 +19,7 @@ from shared.config import (
     WATER_ML_PER_KG,
     SECRETS_DIR,
     OPENROUTER_MODEL_ID,
+    OPENROUTER_REASONING_EFFORT,
 )
 from shared.utils import calculate_bmi, validate_nutrition_targets
 from shared.memory import MemoryManager
@@ -345,20 +346,46 @@ def update_user_profile(field: str, value: str, config: RunnableConfig) -> Dict[
         return {"error": f"Failed to update profile: {str(e)}"}
 
 
+def save_photo_analysis(result: FoodAnalysisResult, config: RunnableConfig, meal_name: str = "") -> None:
+    """Save a validated photo estimate using the journal's existing meal totals."""
+    from nutricoach.food_vision.nutrition_db import NutrientInfo
+
+    if result.error or not result.food_items:
+        raise ValueError("Cannot save an empty or failed photo analysis")
+    for item in result.food_items:
+        NutrientInfo(item.calories, item.protein_g, item.carbs_g, item.fat_g).scaled(item.quantity_grams)
+    result.compute_totals()
+    memory = _get_memory(config)
+    if memory is None:
+        raise ValueError("No user context available")
+    today = date.today().isoformat()
+    log = memory.load_daily_log(today) or DailyLog(date=today)
+    description = ", ".join(f"{item.name} ({item.quantity_grams:.0f}g, {item.calories:.0f}kcal)"
+                            for item in result.food_items)
+    if meal_name.strip():
+        description = f"{meal_name.strip()}: {description}"
+    log.meals.append(MealEntry(
+        meal_type="photo_analysis", description=description[:500],
+        estimated_calories=int(result.total_calories),
+        estimated_protein_g=result.total_protein_g,
+        estimated_carbs_g=result.total_carbs_g,
+        estimated_fat_g=result.total_fat_g,
+    ))
+    _recompute_daily_totals(log)
+    memory.save_daily_log(log)
+
+
 @tool
 def analyze_food_image(
     image_path: str,
     config: RunnableConfig,
-    method: str = "rag_vlm",
     log_meal: bool = False,
 ) -> Dict[str, Any]:
     """
-    Analyze a food photo to identify ingredients, estimate portions, and compute calories/macros.
+    Analyze a food photo with Single-shot VLM to estimate ingredients, portions, and calories/macros.
 
     Args:
         image_path: Path to the food image file
-        method: Analysis method — 'vlm_chain' (pure LLM), 'rag_vlm' (RAG-enhanced, recommended),
-                'clip_ensemble' (CLIP + LLM), 'rf_detr' (object detection)
         log_meal: Save the estimated meal to today's log only when the user asks to log it
 
     Returns:
@@ -370,52 +397,22 @@ def analyze_food_image(
         return {"error": f"Image not found: {image_path}"}
 
     try:
-        analyzer = None
         api_key = config.get("configurable", {}).get("openrouter_api_key")
         model_id = config.get("configurable", {}).get("vision_model_id") or OPENROUTER_MODEL_ID
+        reasoning_effort = config.get("configurable", {}).get("reasoning_effort", OPENROUTER_REASONING_EFFORT)
 
-        if method == "vlm_chain":
-            from nutricoach.food_vision.vlm_analyzer import VLMAnalyzer
-            analyzer = VLMAnalyzer(api_key=api_key, model=model_id)
-        elif method == "rag_vlm":
-            from nutricoach.food_vision.rag_vlm_analyzer import RAGVLMAnalyzer
-            analyzer = RAGVLMAnalyzer(api_key=api_key, model=model_id)
-        elif method == "clip_ensemble":
-            from nutricoach.food_vision.clip_analyzer import CLIPFoodAnalyzer
-            analyzer = CLIPFoodAnalyzer(openrouter_api_key=api_key, llm_model=model_id)
-        elif method == "rf_detr":
-            from nutricoach.food_vision.rf_detr_analyzer import RFDETRAnalyzer
-            analyzer = RFDETRAnalyzer()
-        else:
-            return {"error": f"Unknown method: {method}. Use 'vlm_chain', 'rag_vlm', 'clip_ensemble', or 'rf_detr'"}
+        from nutricoach.food_vision.vlm_analyzer import VLMAnalyzerSingleShot
+        analyzer = VLMAnalyzerSingleShot(api_key=api_key, model=model_id, reasoning_effort=reasoning_effort)
 
         result = analyzer.analyze(image_path)
 
-        memory = _get_memory(config) if log_meal else None
-        if memory and result.food_items and not result.error:
-            today = date.today().isoformat()
-            existing_log = memory.load_daily_log(today)
-            log = existing_log if existing_log else DailyLog(date=today)
-
-            description = ", ".join(
-                f"{f.name} ({f.quantity_grams:.0f}g, {f.calories:.0f}kcal)"
-                for f in result.food_items
-            )
-            log.meals.append(MealEntry(
-                meal_type="photo_analysis",
-                description=description[:500],
-                estimated_calories=int(result.total_calories),
-                estimated_protein_g=result.total_protein_g,
-                estimated_carbs_g=result.total_carbs_g,
-                estimated_fat_g=result.total_fat_g,
-            ))
-            _recompute_daily_totals(log)
-            memory.save_daily_log(log)
+        if log_meal and result.food_items and not result.error:
+            save_photo_analysis(result, config)
 
         return result.to_dict()
 
     except ImportError as e:
-        return {"error": f"Missing dependency for method '{method}': {str(e)}"}
+        return {"error": f"Missing dependency for Single-shot VLM: {str(e)}"}
     except Exception as e:
         return {"error": f"Analysis failed: {str(e)}"}
 

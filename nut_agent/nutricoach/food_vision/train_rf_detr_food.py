@@ -2,23 +2,22 @@
 Fine-tune RF-DETR (base) on the FoodSeg103-derived COCO detection dataset for
 the NutriCoach food photo analyzer (method 1, offline).
 
-Uses nut_agent's RFDETRFoodTrainer so the training path is the same one
+Uses RFDETRFoodTrainer from this package so the training path is the same one
 documented in nut_agent/nutricoach/food_vision/README.md.
 
 Run (after prepare_foodseg103_coco.py):
-    CUDA_VISIBLE_DEVICES=1 PYTHONPATH=. uv run python ml_pipeline/train_rf_detr_food.py
+    CUDA_VISIBLE_DEVICES=1 PYTHONPATH=nut_agent uv run python \
+        -m nut_agent.nutricoach.food_vision.train_rf_detr_food
 """
 
-import sys
 from pathlib import Path
 
-ML_PIPELINE_DIR = Path(__file__).parent
-sys.path.insert(0, str(ML_PIPELINE_DIR.parent / "nut_agent"))
+from .rf_detr_analyzer import RFDETRFoodTrainer
 
-from nutricoach.food_vision.rf_detr_analyzer import RFDETRFoodTrainer
+FOOD_VISION_DIR = Path(__file__).parent
 
-DATASET_DIR = ML_PIPELINE_DIR / "data" / "foodseg103_coco"
-OUTPUT_DIR = ML_PIPELINE_DIR / "results" / "rf_detr_food"
+DATASET_DIR = FOOD_VISION_DIR / "data" / "foodseg103_coco"
+OUTPUT_DIR = FOOD_VISION_DIR / "results" / "rf_detr_food"
 EPOCHS = 8
 BATCH_SIZE = 8
 GRAD_ACCUM = 2

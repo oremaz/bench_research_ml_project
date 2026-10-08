@@ -1,17 +1,9 @@
 """
-Method 2: Pure vLLM approach via OpenRouter API.
+Method 2: Single-shot vision-language model baseline via OpenRouter.
 
-Uses the configured OpenRouter vision model with chained prompts:
-  Step 1: Identify all food items visible on the plate
-  Step 2: Estimate portion sizes for each item
-  Step 3: Compute detailed calorie/macro breakdown
-
-All reasoning is done by the LLM — no CV models needed.
-This is the simplest approach and serves as a strong baseline.
-
-Requires:
-  pip install openai  (OpenRouter uses OpenAI-compatible API)
-  OPENROUTER_API_KEY env var
+One image prompt produces foods, estimated grams, and calorie/macro values.
+No local nutrition database is queried. Requires an OpenRouter API key and
+an image-capable model; this module does not use the vLLM library.
 """
 
 import json
@@ -20,7 +12,7 @@ import os
 import time
 from typing import Optional
 
-from shared.config import OPENROUTER_MODEL_ID
+from shared.config import OPENROUTER_MODEL_ID, OPENROUTER_REASONING_EFFORT, OPENROUTER_MAX_OUTPUT_TOKENS, openrouter_reasoning
 
 from .base import (
     FoodAnalyzer,
@@ -32,190 +24,105 @@ from .base import (
 
 logger = logging.getLogger(__name__)
 
-# --- Prompt Chain ---
 
-STEP1_IDENTIFY = """You are an expert nutritionist analyzing a photo of a meal.
+class VLMAnalyzerSingleShot(FoodAnalyzer):
+    """Identify foods and estimate portions and nutrients in one image API call."""
 
-Look at this image carefully and list ALL food items you can identify.
-For each item, be as specific as possible (e.g., "grilled chicken breast" not just "chicken").
+    method_name = "vlm_single"
 
-Return ONLY a JSON array of strings. Example:
-["grilled chicken breast", "steamed white rice", "sautéed broccoli", "olive oil dressing"]
+    SINGLE_PROMPT = """You are an expert nutritionist. Analyze this meal photo and provide a complete nutritional breakdown.
 
-Be thorough — include sauces, condiments, garnishes, and drinks if visible."""
+For each food item visible:
+1. Identify the food (be specific about preparation method)
+2. Estimate the portion size in grams
+3. Calculate calories, protein (g), carbs (g), and fat (g)
 
-STEP2_PORTIONS = """You are an expert nutritionist estimating portion sizes from a meal photo.
+Return ONLY a JSON object:
+{
+  "items": [
+    {
+      "name": "food name",
+      "quantity_grams": 180,
+      "portion_description": "1 medium serving",
+      "confidence": 0.8,
+      "calories": 250,
+      "protein_g": 30.0,
+      "carbs_g": 5.0,
+      "fat_g": 12.0
+    }
+  ]
+}
 
-The following food items were identified in this image:
-{food_items}
-
-For each item, estimate:
-1. The weight in grams (be realistic — a typical chicken breast is 150-200g, a cup of rice is ~180g cooked)
-2. A human-readable portion description (e.g., "1 medium breast", "3/4 cup")
-3. Your confidence (0.0 to 1.0) in this estimate
-
-Return ONLY a JSON array of objects:
-[
-  {{"name": "grilled chicken breast", "quantity_grams": 180, "portion_description": "1 medium breast", "confidence": 0.8}},
-  ...
-]
-
-Use visual cues: plate size (standard dinner plate ~26cm), utensils, and food proportions relative to each other."""
-
-STEP3_NUTRITION = """You are an expert nutritionist computing the nutritional breakdown of a meal.
-
-Here are the food items with estimated portions:
-{portions}
-
-For each item, provide calories, protein (g), carbs (g), and fat (g).
-Use standard USDA/nutrition database values, adjusted for cooking method.
-
-Return ONLY a JSON array:
-[
-  {{
-    "name": "grilled chicken breast",
-    "quantity_grams": 180,
-    "portion_description": "1 medium breast",
-    "confidence": 0.8,
-    "calories": 297,
-    "protein_g": 55.8,
-    "carbs_g": 0.0,
-    "fat_g": 6.5
-  }},
-  ...
-]
-
-Be precise. Account for cooking oils, sauces, and preparation methods."""
-
-
-class VLMAnalyzer(FoodAnalyzer):
-    """
-    Pure vision-language model approach via OpenRouter.
-
-    Uses a 3-step prompt chain:
-    1. Food identification (vision)
-    2. Portion estimation (vision + reasoning)
-    3. Nutrition computation (reasoning)
-    """
-
-    method_name = "vlm_chain"
+Be thorough — include sauces, condiments, garnishes, drinks. Use standard nutrition values."""
 
     def __init__(
         self,
         api_key: Optional[str] = None,
         model: str = OPENROUTER_MODEL_ID,
         base_url: str = "https://openrouter.ai/api/v1",
+        reasoning_effort: str = OPENROUTER_REASONING_EFFORT,
     ):
         self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
         self.model = model or OPENROUTER_MODEL_ID
         self.base_url = base_url
+        self.reasoning_effort = reasoning_effort
         self._client = None
 
     def _get_client(self):
         if self._client is None:
-            try:
-                from openai import OpenAI
-            except ImportError:
-                raise ImportError("openai is required. Install with: pip install openai")
-            self._client = OpenAI(
-                base_url=self.base_url,
-                api_key=self.api_key,
-            )
+            from openai import OpenAI
+            self._client = OpenAI(base_url=self.base_url, api_key=self.api_key)
         return self._client
 
-    def _call_vlm(self, messages: list, max_tokens: int = 2000) -> str:
-        """Make a single API call to the VLM."""
-        client = self._get_client()
-        response = client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=0.1,
-        )
-        return response.choices[0].message.content.strip()
-
-    def _make_image_message(self, image_path: str, text: str) -> dict:
-        """Create a message with image content."""
-        b64 = encode_image_to_base64(image_path)
-        media_type = get_image_media_type(image_path)
-        return {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": text},
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:{media_type};base64,{b64}",
-                    },
-                },
-            ],
-        }
-
     def analyze(self, image_path: str) -> FoodAnalysisResult:
-        """Run the 3-step prompt chain on a food image."""
         start = time.time()
         result = FoodAnalysisResult(method=self.method_name)
-        raw_parts = []
 
         try:
             if not self.api_key:
-                raise ValueError(
-                    "OPENROUTER_API_KEY not set. "
-                    "Set it as an environment variable or pass api_key to VLMAnalyzer."
-                )
+                raise ValueError("OPENROUTER_API_KEY not set.")
 
-            # Step 1: Identify food items
-            msg1 = self._make_image_message(image_path, STEP1_IDENTIFY)
-            raw1 = self._call_vlm([msg1])
-            raw_parts.append(f"STEP1:\n{raw1}")
-            food_names = self._parse_json(raw1, list)
+            b64 = encode_image_to_base64(image_path)
+            media_type = get_image_media_type(image_path)
 
-            if not food_names:
-                result.error = "Could not identify any food items"
-                result.elapsed_seconds = time.time() - start
-                return result
+            client = self._get_client()
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": self.SINGLE_PROMPT},
+                        {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}},
+                    ],
+                }],
+                max_tokens=OPENROUTER_MAX_OUTPUT_TOKENS,
+                extra_body=openrouter_reasoning(self.reasoning_effort),
+                temperature=0.1,
+            )
 
-            # Step 2: Estimate portions (with image context)
-            step2_prompt = STEP2_PORTIONS.format(food_items=json.dumps(food_names))
-            msg2 = self._make_image_message(image_path, step2_prompt)
-            raw2 = self._call_vlm([msg2])
-            raw_parts.append(f"STEP2:\n{raw2}")
-            portions = self._parse_json(raw2, list)
+            raw = response.choices[0].message.content.strip()
+            result.raw_response = raw
+            parsed = self._parse_json(raw, dict)
 
-            if not portions:
-                # Fallback: use food names with default portions
-                portions = [
-                    {"name": n, "quantity_grams": 150, "portion_description": "estimated", "confidence": 0.3}
-                    for n in food_names
-                ]
-
-            # Step 3: Compute nutrition
-            step3_prompt = STEP3_NUTRITION.format(portions=json.dumps(portions, indent=2))
-            raw3 = self._call_vlm([{"role": "user", "content": step3_prompt}])
-            raw_parts.append(f"STEP3:\n{raw3}")
-            nutrition = self._parse_json(raw3, list)
-
-            if not nutrition:
-                nutrition = portions  # Fallback to portions without nutrition
-
-            # Build FoodItems
-            for item in nutrition:
-                result.food_items.append(FoodItem(
-                    name=item.get("name", "unknown"),
-                    quantity_grams=item.get("quantity_grams", 100),
-                    confidence=item.get("confidence", 0.5),
-                    calories=item.get("calories", 0),
-                    protein_g=item.get("protein_g", 0),
-                    carbs_g=item.get("carbs_g", 0),
-                    fat_g=item.get("fat_g", 0),
-                    portion_description=item.get("portion_description", ""),
-                ))
-
-            result.compute_totals()
-            result.raw_response = "\n---\n".join(raw_parts)
+            if parsed and isinstance(parsed.get("items"), list) and parsed["items"]:
+                if not all(isinstance(item, dict) for item in parsed["items"]):
+                    raise ValueError("Food items must be JSON objects")
+                for item in parsed["items"]:
+                    result.food_items.append(FoodItem(
+                        name=item.get("name", "unknown"),
+                        quantity_grams=item.get("quantity_grams", 100),
+                        confidence=item.get("confidence", 0.5),
+                        calories=item.get("calories", 0),
+                        protein_g=item.get("protein_g", 0),
+                        carbs_g=item.get("carbs_g", 0),
+                        fat_g=item.get("fat_g", 0),
+                        portion_description=item.get("portion_description", ""),
+                    ))
+                result.compute_totals()
+            else:
+                result.error = "Could not parse response"
 
         except Exception as e:
-            logger.error("VLM analysis failed: %s", e)
             result.error = str(e)
 
         result.elapsed_seconds = time.time() - start
@@ -254,103 +161,4 @@ class VLMAnalyzer(FoodAnalyzer):
         return None
 
 
-class VLMAnalyzerSingleShot(FoodAnalyzer):
-    """
-    Simpler single-prompt variant — sends one comprehensive prompt.
-    Faster and cheaper but potentially less accurate than the chained approach.
-    """
-
-    method_name = "vlm_single"
-
-    SINGLE_PROMPT = """You are an expert nutritionist. Analyze this meal photo and provide a complete nutritional breakdown.
-
-For each food item visible:
-1. Identify the food (be specific about preparation method)
-2. Estimate the portion size in grams
-3. Calculate calories, protein (g), carbs (g), and fat (g)
-
-Return ONLY a JSON object:
-{
-  "items": [
-    {
-      "name": "food name",
-      "quantity_grams": 180,
-      "portion_description": "1 medium serving",
-      "confidence": 0.8,
-      "calories": 250,
-      "protein_g": 30.0,
-      "carbs_g": 5.0,
-      "fat_g": 12.0
-    }
-  ]
-}
-
-Be thorough — include sauces, condiments, garnishes, drinks. Use standard nutrition values."""
-
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        model: str = OPENROUTER_MODEL_ID,
-        base_url: str = "https://openrouter.ai/api/v1",
-    ):
-        self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
-        self.model = model or OPENROUTER_MODEL_ID
-        self.base_url = base_url
-        self._client = None
-
-    def _get_client(self):
-        if self._client is None:
-            from openai import OpenAI
-            self._client = OpenAI(base_url=self.base_url, api_key=self.api_key)
-        return self._client
-
-    def analyze(self, image_path: str) -> FoodAnalysisResult:
-        start = time.time()
-        result = FoodAnalysisResult(method=self.method_name)
-
-        try:
-            if not self.api_key:
-                raise ValueError("OPENROUTER_API_KEY not set.")
-
-            b64 = encode_image_to_base64(image_path)
-            media_type = get_image_media_type(image_path)
-
-            client = self._get_client()
-            response = client.chat.completions.create(
-                model=self.model,
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": self.SINGLE_PROMPT},
-                        {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}},
-                    ],
-                }],
-                max_tokens=2000,
-                temperature=0.1,
-            )
-
-            raw = response.choices[0].message.content.strip()
-            result.raw_response = raw
-            parsed = VLMAnalyzer._parse_json(None, raw, dict)
-
-            if parsed and "items" in parsed:
-                for item in parsed["items"]:
-                    result.food_items.append(FoodItem(
-                        name=item.get("name", "unknown"),
-                        quantity_grams=item.get("quantity_grams", 100),
-                        confidence=item.get("confidence", 0.5),
-                        calories=item.get("calories", 0),
-                        protein_g=item.get("protein_g", 0),
-                        carbs_g=item.get("carbs_g", 0),
-                        fat_g=item.get("fat_g", 0),
-                        portion_description=item.get("portion_description", ""),
-                    ))
-                result.compute_totals()
-            else:
-                result.error = "Could not parse response"
-
-        except Exception as e:
-            result.error = str(e)
-
-        result.elapsed_seconds = time.time() - start
-        return result
+VLMAnalyzer = VLMAnalyzerSingleShot

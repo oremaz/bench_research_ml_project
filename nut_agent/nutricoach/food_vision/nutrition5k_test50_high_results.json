@@ -1,0 +1,3854 @@
+{
+  "manifest": {
+    "dataset": "Nutrition5k",
+    "seed": 42,
+    "dish_ids": [
+      "dish_1561148042",
+      "dish_1562008979",
+      "dish_1561578839",
+      "dish_1558373008",
+      "dish_1565035746",
+      "dish_1567007719",
+      "dish_1563389548",
+      "dish_1563998279",
+      "dish_1559849412",
+      "dish_1561662190",
+      "dish_1568305225",
+      "dish_1563984296",
+      "dish_1561405389",
+      "dish_1558113941",
+      "dish_1564689108",
+      "dish_1562009894",
+      "dish_1561739265",
+      "dish_1564773903",
+      "dish_1558641287",
+      "dish_1565117429",
+      "dish_1562703345",
+      "dish_1566851704",
+      "dish_1558639440",
+      "dish_1563565508",
+      "dish_1565974375",
+      "dish_1566414412",
+      "dish_1561574368",
+      "dish_1558375833",
+      "dish_1565035830",
+      "dish_1566328776",
+      "dish_1563478751",
+      "dish_1563220987",
+      "dish_1563996464",
+      "dish_1561654392",
+      "dish_1566502505",
+      "dish_1563909580",
+      "dish_1558110478",
+      "dish_1564428144",
+      "dish_1561578865",
+      "dish_1565894889",
+      "dish_1562690950",
+      "dish_1559157777",
+      "dish_1558372948",
+      "dish_1564773847",
+      "dish_1564427430",
+      "dish_1558639818",
+      "dish_1560800988",
+      "dish_1558461692",
+      "dish_1558375667",
+      "dish_1565638515"
+    ],
+    "selection": "seeded sample from official rgb_test_ids intersect depth_test_ids",
+    "eligible_dishes": 507,
+    "image_view": "one overhead RGB image per dish; no depth input",
+    "source_url": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/",
+    "source_sha256": {
+      "dish_ids/splits/rgb_test_ids.txt": "560ff0eedb1a2027c21f5da3a4c38a53fa201c87d108e76b11cceaa1d956ac8e",
+      "dish_ids/splits/depth_test_ids.txt": "6e43a5334a72bd06fa9c0d4b3bc86e2f57e5342b0b260d3fa003a76f7e39eca2",
+      "dish_ids/splits/rgb_train_ids.txt": "efd34a682b5483b01e6bd0a7c1267efec28440a8194985f9d3817d8ebc8169bd",
+      "metadata/dish_metadata_cafe1.csv": "881df31f27c2343d0ce219964527e0796f6ddadd60701ce6840fa801e8c2a960",
+      "metadata/dish_metadata_cafe2.csv": "ef9f800d7b9c2e7e9a9e7cda5cbb4cfe51c760a8c1af4c05786ccf051bf5d77d"
+    },
+    "image_sha256": {
+      "dish_1561148042": "d4dbb79518ee8f09463198e72fd193de97d7546e3501b89965a86e5815ed36b1",
+      "dish_1562008979": "bfe934ddb8a0017ac56ec27d385d3d0184410ff6658b9f3608a28efa39ae98b6",
+      "dish_1561578839": "4cd9a28bc67ba8690dcdc3d5029f24619cfeb61c43bea371102d4486532bb3a8",
+      "dish_1558373008": "b94fba10b12188a21613b89f737dfb39d6609db672c5064fece0ad358a08d269",
+      "dish_1565035746": "28f5fe26394586f124c04af2d22270d8a8079c141fc1f2b0fe80593d77ae2869",
+      "dish_1567007719": "feb54bd4421ba107cb1fb30edd4242fbe7e9b21f38108bf7f826855692c3baa9",
+      "dish_1563389548": "bb7971e43076da39b783a637ded5cfc2924e3b34996ffd2c13572c080d5f10af",
+      "dish_1563998279": "cf8e1a9e2015b3ec6b38f9c4b0d21ce0927acdfdbf028a8fc9c8d9947cba5c33",
+      "dish_1559849412": "6cabce893115951a0c5aba532523d220d562f15924dea84d9b2fc3166cfb315c",
+      "dish_1561662190": "dff9077c47c36acbff08c09c993cb6391ed59e449734fc1cf91ed9a9b13659ed",
+      "dish_1568305225": "d5a61544f904fa163ed767d6dbd300fbb1933ccef06051b89a6b0901539876ad",
+      "dish_1563984296": "278e8701ceeb64cb46332c7ca5795484ca71b4966136dce3a68dda47689f5149",
+      "dish_1561405389": "61e83ad2bcb9e9904ea29015e460652e03d9e72b3183625b183784c0de847269",
+      "dish_1558113941": "dafc1721289cb26e812b39a485f1c09cb85f2fb9d5b8a09e2c7d1e4cd21b92ef",
+      "dish_1564689108": "e07f9f4e8bb07e9561c3fcd1719a18c0efbc8e0b1a642484390323670e39d179",
+      "dish_1562009894": "c1de8032d97cd371dbd18b0f0f46690e53dbd5b2eb6616f957967d013d629e90",
+      "dish_1561739265": "acf86ec0bd14b2491ec1630ffafd0cf8ee842eb5966e9b791906e8d9f8be31ee",
+      "dish_1564773903": "c81c0ddd6c219226a4cac9744e0af96020f9f9f94ea2008feafc4ea72297276f",
+      "dish_1558641287": "6f28d3aa26d340c8805af42930c149385deb975b5d078dc44e2da87be7f822fe",
+      "dish_1565117429": "0e505f0ae64cabd5327312e2e7cca36ee54d1d988d872c1f4de7ed57cf8f7032",
+      "dish_1562703345": "6977d2eb973dcc9d5ccef78d528b3b8bb3178dc33e2919f2b9ef49153577bb22",
+      "dish_1566851704": "49e62ad29ebe0d2f9d95686d2f92e0a682705811345550d0a96ec2c5c4f51545",
+      "dish_1558639440": "254c46904b7205a39add74dd80f291b358a85350702a2707b5d365e7c8ea6dd4",
+      "dish_1563565508": "ae8907bfa7edb69771b7cd557977a933d7974f74202d107a8d82cee231af4b0d",
+      "dish_1565974375": "e15b278dacb88e851a38b73d152e3ff3b41b0824b6e0e206817fcdce62888c45",
+      "dish_1566414412": "0683af0ecbcd5fce16ff3d2e1794ace29c68e22757c1539d14325c46b764ab43",
+      "dish_1561574368": "758e9bbdf600e67d1aace77af43917882844de78767fd26fb3b2c340677d1b01",
+      "dish_1558375833": "dde0cb6277608e7095a9f700b9babb829b3b6ed0304088bdf165e37bf920afa3",
+      "dish_1565035830": "d96bcb98516cd8eb94da5b5198197145cbe29c7f01d80901957b3677e4098bb4",
+      "dish_1566328776": "0a6c38b2603bd9b666d53739c24b1b2fc06b410e95dd067e669b034c6922e536",
+      "dish_1563478751": "0366e274bbd7c135a371b27c36a83f0819b472f15680fb3daa63867ba3608138",
+      "dish_1563220987": "e3c29090de323cd6ab709f711eec18636d23fafcc942fb79d54016535e84bac9",
+      "dish_1563996464": "64b4717d2166fec0d9107bebc3c42ab39c354a89c5fa2e4a0388f8abb2912d4b",
+      "dish_1561654392": "ef8ccb85edbb7b615e42c2796ada5e559f1863375ba3a4182770acdaaac80a3a",
+      "dish_1566502505": "b7bf00bb028640240452e83d2106ee00b8072e1372488c09bf3aed1267c9cf02",
+      "dish_1563909580": "14e42294b03abbae995cc88f48446a6767c7871f59695777e6cfb5399b867dfd",
+      "dish_1558110478": "546888529752e831ffa737a19e005f9c21c685e39263c33c40f19ee632c461ea",
+      "dish_1564428144": "0acfe6f39f26354fbefc496c9e35d2c712b3e23a0b3d452daad6e8dfa3fdd22d",
+      "dish_1561578865": "116508964c2284761256bc9435622c027c92bafc4067ae05d2bd473f41eff732",
+      "dish_1565894889": "23ed313904d2d27557ee85c228b992547280163eaf54f8d0f5760727aed4de8f",
+      "dish_1562690950": "a7972649d335d23138e4edf092ff0d8c224fe120cf1252db9539bb5f91a3c353",
+      "dish_1559157777": "7faedc49bdc4e4703130ca2863dcfe1df752fa503c40973bff6f763197c46e80",
+      "dish_1558372948": "4181a90b0f03fea066f8495105a8a1daf062d6f19a3545830b9c9d76b3c6b878",
+      "dish_1564773847": "a96572a57c178c164b24f7e08cf5c1bd8d8b5d4370fbc3269e88cbbc68a6c8e7",
+      "dish_1564427430": "1a353b0de279f264bbbf48e613948b83291d99e50d9d19910732d1d7ef02baeb",
+      "dish_1558639818": "333154ffcf6f3f1a76a2e90e9d352082de170322bad411a33adbef4b5f0c8718",
+      "dish_1560800988": "bb5465abe34ceb690ddf99fb289fe367df555130fa05c1b5526668f9a9abc03e",
+      "dish_1558461692": "abaad2eb4a2aae2f0bd13872bacd9026d9ec063573aeaa598268e7b768077f9c",
+      "dish_1558375667": "5ccbc7b46369827e5fad8f2bd3b1244d5f40a6e27cb00b1c0d049e13e9c4a7f0",
+      "dish_1565638515": "f0c04b575dbec8fde6626c07cf4466ba69c616030f2496b2163fdb8ccca3e396"
+    },
+    "references": {
+      "dish_1561148042": {
+        "calories": 370.755463,
+        "mass_g": 245,
+        "fat_g": 19.9778,
+        "carbs_g": 25.641567,
+        "protein_g": 22.726137
+      },
+      "dish_1562008979": {
+        "calories": 382.936646,
+        "mass_g": 290,
+        "fat_g": 22.224644,
+        "carbs_g": 10.17357,
+        "protein_g": 35.345387
+      },
+      "dish_1561578839": {
+        "calories": 362.154694,
+        "mass_g": 214,
+        "fat_g": 14.811577,
+        "carbs_g": 43.354206,
+        "protein_g": 14.903948
+      },
+      "dish_1558373008": {
+        "calories": 251.558014,
+        "mass_g": 73,
+        "fat_g": 19.929001,
+        "carbs_g": 3.066,
+        "protein_g": 14.089001
+      },
+      "dish_1565035746": {
+        "calories": 43.099998,
+        "mass_g": 149,
+        "fat_g": 0.369,
+        "carbs_g": 9.01,
+        "protein_g": 2.409
+      },
+      "dish_1567007719": {
+        "calories": 14.28,
+        "mass_g": 42,
+        "fat_g": 0.084,
+        "carbs_g": 3.36,
+        "protein_g": 0.336
+      },
+      "dish_1563389548": {
+        "calories": 438.828003,
+        "mass_g": 194,
+        "fat_g": 28.906,
+        "carbs_g": 0.194,
+        "protein_g": 43.843998
+      },
+      "dish_1563998279": {
+        "calories": 565.005005,
+        "mass_g": 296,
+        "fat_g": 31.652304,
+        "carbs_g": 21.402533,
+        "protein_g": 47.960518
+      },
+      "dish_1559849412": {
+        "calories": 352.641022,
+        "mass_g": 61,
+        "fat_g": 30.195,
+        "carbs_g": 13.847,
+        "protein_g": 13.664001
+      },
+      "dish_1561662190": {
+        "calories": 117.318321,
+        "mass_g": 104,
+        "fat_g": 3.98708,
+        "carbs_g": 18.392817,
+        "protein_g": 2.39816
+      },
+      "dish_1568305225": {
+        "calories": 428.667786,
+        "mass_g": 144,
+        "fat_g": 35.136887,
+        "carbs_g": 4.897249,
+        "protein_g": 24.472982
+      },
+      "dish_1563984296": {
+        "calories": 436.337067,
+        "mass_g": 871,
+        "fat_g": 3.53839,
+        "carbs_g": 44.607613,
+        "protein_g": 51.177761
+      },
+      "dish_1561405389": {
+        "calories": 265.983459,
+        "mass_g": 223,
+        "fat_g": 8.393058,
+        "carbs_g": 12.105439,
+        "protein_g": 34.985947
+      },
+      "dish_1558113941": {
+        "calories": 296.890015,
+        "mass_g": 78,
+        "fat_g": 24.862,
+        "carbs_g": 12.834001,
+        "protein_g": 11.816001
+      },
+      "dish_1564689108": {
+        "calories": 203.66246,
+        "mass_g": 159,
+        "fat_g": 15.866496,
+        "carbs_g": 13.156699,
+        "protein_g": 4.929469
+      },
+      "dish_1562009894": {
+        "calories": 244.80722,
+        "mass_g": 200,
+        "fat_g": 12.012504,
+        "carbs_g": 29.885567,
+        "protein_g": 5.628496
+      },
+      "dish_1561739265": {
+        "calories": 292.040009,
+        "mass_g": 308,
+        "fat_g": 9.989,
+        "carbs_g": 41.127003,
+        "protein_g": 10.689
+      },
+      "dish_1564773903": {
+        "calories": 316.827545,
+        "mass_g": 336,
+        "fat_g": 16.086779,
+        "carbs_g": 25.091196,
+        "protein_g": 19.580328
+      },
+      "dish_1558641287": {
+        "calories": 11.52,
+        "mass_g": 64,
+        "fat_g": 0.128,
+        "carbs_g": 2.496,
+        "protein_g": 0.576
+      },
+      "dish_1565117429": {
+        "calories": 390.872986,
+        "mass_g": 147,
+        "fat_g": 13.818,
+        "carbs_g": 49.245003,
+        "protein_g": 16.464001
+      },
+      "dish_1562703345": {
+        "calories": 154.279999,
+        "mass_g": 58,
+        "fat_g": 5.626,
+        "carbs_g": 19.140001,
+        "protein_g": 6.38
+      },
+      "dish_1566851704": {
+        "calories": 461.160156,
+        "mass_g": 348,
+        "fat_g": 18.996983,
+        "carbs_g": 46.817013,
+        "protein_g": 26.711891
+      },
+      "dish_1558639440": {
+        "calories": 60.32,
+        "mass_g": 116,
+        "fat_g": 0.232,
+        "carbs_g": 16.24,
+        "protein_g": 0.348
+      },
+      "dish_1563565508": {
+        "calories": 403.862,
+        "mass_g": 387,
+        "fat_g": 24.761736,
+        "carbs_g": 32.026699,
+        "protein_g": 26.264353
+      },
+      "dish_1565974375": {
+        "calories": 459.849976,
+        "mass_g": 85,
+        "fat_g": 35.700001,
+        "carbs_g": 1.19,
+        "protein_g": 31.450001
+      },
+      "dish_1566414412": {
+        "calories": 920.120422,
+        "mass_g": 658,
+        "fat_g": 37.812386,
+        "carbs_g": 57.062336,
+        "protein_g": 85.334846
+      },
+      "dish_1561574368": {
+        "calories": 22,
+        "mass_g": 50,
+        "fat_g": 1.05,
+        "carbs_g": 2.15,
+        "protein_g": 1.6
+      },
+      "dish_1558375833": {
+        "calories": 317.032013,
+        "mass_g": 92,
+        "fat_g": 25.116001,
+        "carbs_g": 3.864,
+        "protein_g": 17.756001
+      },
+      "dish_1565035830": {
+        "calories": 340.127991,
+        "mass_g": 414,
+        "fat_g": 6.475,
+        "carbs_g": 14.785001,
+        "protein_g": 54.717999
+      },
+      "dish_1566328776": {
+        "calories": 901.810059,
+        "mass_g": 436,
+        "fat_g": 28.684999,
+        "carbs_g": 78.293999,
+        "protein_g": 77.723999
+      },
+      "dish_1563478751": {
+        "calories": 950.395081,
+        "mass_g": 545,
+        "fat_g": 45.303986,
+        "carbs_g": 54.133282,
+        "protein_g": 74.772202
+      },
+      "dish_1563220987": {
+        "calories": 224.987503,
+        "mass_g": 110,
+        "fat_g": 12.479591,
+        "carbs_g": 4.072388,
+        "protein_g": 22.457699
+      },
+      "dish_1563996464": {
+        "calories": 100.489189,
+        "mass_g": 146,
+        "fat_g": 7.867642,
+        "carbs_g": 6.667095,
+        "protein_g": 3.017902
+      },
+      "dish_1561654392": {
+        "calories": 494.065491,
+        "mass_g": 282,
+        "fat_g": 35.081356,
+        "carbs_g": 13.55521,
+        "protein_g": 30.914278
+      },
+      "dish_1566502505": {
+        "calories": 454.517365,
+        "mass_g": 275,
+        "fat_g": 22.45969,
+        "carbs_g": 33.146801,
+        "protein_g": 31.874937
+      },
+      "dish_1563909580": {
+        "calories": 544.311523,
+        "mass_g": 361,
+        "fat_g": 20.122177,
+        "carbs_g": 74.144119,
+        "protein_g": 18.481764
+      },
+      "dish_1558110478": {
+        "calories": 205.438995,
+        "mass_g": 161,
+        "fat_g": 6.801,
+        "carbs_g": 27.931999,
+        "protein_g": 8.301001
+      },
+      "dish_1564428144": {
+        "calories": 205.212921,
+        "mass_g": 171,
+        "fat_g": 14.074488,
+        "carbs_g": 16.700045,
+        "protein_g": 5.11141
+      },
+      "dish_1561578865": {
+        "calories": 417.185303,
+        "mass_g": 246,
+        "fat_g": 17.301928,
+        "carbs_g": 49.707146,
+        "protein_g": 16.735947
+      },
+      "dish_1565894889": {
+        "calories": 257.812988,
+        "mass_g": 74,
+        "fat_g": 11.167999,
+        "carbs_g": 33.294998,
+        "protein_g": 6.641
+      },
+      "dish_1562690950": {
+        "calories": 109.061714,
+        "mass_g": 202,
+        "fat_g": 1.381829,
+        "carbs_g": 24.826828,
+        "protein_g": 1.861341
+      },
+      "dish_1559157777": {
+        "calories": 2.53,
+        "mass_g": 11,
+        "fat_g": 0.044,
+        "carbs_g": 0.396,
+        "protein_g": 0.319
+      },
+      "dish_1558372948": {
+        "calories": 687.939026,
+        "mass_g": 119,
+        "fat_g": 58.904999,
+        "carbs_g": 27.013,
+        "protein_g": 26.656
+      },
+      "dish_1564773847": {
+        "calories": 238.027573,
+        "mass_g": 161,
+        "fat_g": 15.737777,
+        "carbs_g": 5.8212,
+        "protein_g": 17.603327
+      },
+      "dish_1564427430": {
+        "calories": 345.620026,
+        "mass_g": 170,
+        "fat_g": 23.860001,
+        "carbs_g": 2.34,
+        "protein_g": 30.790001
+      },
+      "dish_1558639818": {
+        "calories": 20.059999,
+        "mass_g": 59,
+        "fat_g": 0.118,
+        "carbs_g": 4.72,
+        "protein_g": 0.472
+      },
+      "dish_1560800988": {
+        "calories": 314.865662,
+        "mass_g": 230,
+        "fat_g": 5.115041,
+        "carbs_g": 61.249092,
+        "protein_g": 11.727562
+      },
+      "dish_1558461692": {
+        "calories": 231.240005,
+        "mass_g": 40,
+        "fat_g": 19.799999,
+        "carbs_g": 9.08,
+        "protein_g": 8.96
+      },
+      "dish_1558375667": {
+        "calories": 687.939026,
+        "mass_g": 119,
+        "fat_g": 58.904999,
+        "carbs_g": 27.013,
+        "protein_g": 26.656
+      },
+      "dish_1565638515": {
+        "calories": 198.970978,
+        "mass_g": 165,
+        "fat_g": 10.759086,
+        "carbs_g": 8.950356,
+        "protein_g": 16.704958
+      }
+    }
+  },
+  "summary": {
+    "methods": {
+      "rf_detr": {
+        "attempted": 50,
+        "successful": 50,
+        "failures": 0,
+        "fallback_predictions": 34,
+        "mean_inference_seconds": 0.11551261411397717,
+        "http_requests": 0,
+        "errors": {
+          "calories": {
+            "mae": 464.9315540999999,
+            "mean_signed_error": 385.18362605999994,
+            "normalized_mae_percent": 140.7397737590934
+          },
+          "mass_g": {
+            "mae": 430.86,
+            "mean_signed_error": 419.42,
+            "normalized_mae_percent": 205.38659548098008
+          },
+          "fat_g": {
+            "mae": 25.440836439999998,
+            "mean_signed_error": 16.503835719999998,
+            "normalized_mae_percent": 143.94364586046498
+          },
+          "carbs_g": {
+            "mae": 51.88470982,
+            "mean_signed_error": 48.28761858000001,
+            "normalized_mae_percent": 227.5207946421026
+          },
+          "protein_g": {
+            "mae": 22.607666199999997,
+            "mean_signed_error": 13.633168919999997,
+            "normalized_mae_percent": 106.00574513482758
+          }
+        }
+      },
+      "vlm_single": {
+        "attempted": 50,
+        "successful": 50,
+        "failures": 0,
+        "fallback_predictions": 0,
+        "mean_inference_seconds": 24.24824996423675,
+        "http_requests": 50,
+        "errors": {
+          "calories": {
+            "mae": 159.39102613999998,
+            "mean_signed_error": 106.01162606,
+            "normalized_mae_percent": 48.2493751184468
+          },
+          "mass_g": {
+            "mae": 134.8,
+            "mean_signed_error": 113.8,
+            "normalized_mae_percent": 64.25779387930213
+          },
+          "fat_g": {
+            "mae": 8.301346599999999,
+            "mean_signed_error": 0.8918357200000001,
+            "normalized_mae_percent": 46.968821090985124
+          },
+          "carbs_g": {
+            "mae": 20.52193826,
+            "mean_signed_error": 17.47561858,
+            "normalized_mae_percent": 89.9912077509884
+          },
+          "protein_g": {
+            "mae": 13.420296119999998,
+            "mean_signed_error": 6.257168919999999,
+            "normalized_mae_percent": 62.926817723920365
+          }
+        }
+      },
+      "clip_ensemble": {
+        "attempted": 50,
+        "successful": 50,
+        "failures": 0,
+        "fallback_predictions": 0,
+        "mean_inference_seconds": 11.089509915122763,
+        "http_requests": 50,
+        "errors": {
+          "calories": {
+            "mae": 196.3769089,
+            "mean_signed_error": 92.26762606,
+            "normalized_mae_percent": 59.445398976193296
+          },
+          "mass_g": {
+            "mae": 124.32,
+            "mean_signed_error": 99.4,
+            "normalized_mae_percent": 59.26208408809229
+          },
+          "fat_g": {
+            "mae": 12.30431228,
+            "mean_signed_error": 0.3418357200000008,
+            "normalized_mae_percent": 69.61750544507217
+          },
+          "carbs_g": {
+            "mae": 18.6252277,
+            "mean_signed_error": 14.071618579999997,
+            "normalized_mae_percent": 81.67390010265844
+          },
+          "protein_g": {
+            "mae": 16.29516108,
+            "mean_signed_error": 7.427168919999999,
+            "normalized_mae_percent": 76.40685584686499
+          }
+        }
+      },
+      "rag_vlm": {
+        "attempted": 50,
+        "successful": 50,
+        "failures": 0,
+        "fallback_predictions": 0,
+        "mean_inference_seconds": 30.474939584077802,
+        "http_requests": 100,
+        "errors": {
+          "calories": {
+            "mae": 200.76902634,
+            "mean_signed_error": 149.76962605999998,
+            "normalized_mae_percent": 60.77494008687476
+          },
+          "mass_g": {
+            "mae": 140.38,
+            "mean_signed_error": 126.22,
+            "normalized_mae_percent": 66.91772332920202
+          },
+          "fat_g": {
+            "mae": 11.77018812,
+            "mean_signed_error": 5.526235720000001,
+            "normalized_mae_percent": 66.59544368566885
+          },
+          "carbs_g": {
+            "mae": 19.49747022,
+            "mean_signed_error": 16.65261858,
+            "normalized_mae_percent": 85.49879017064784
+          },
+          "protein_g": {
+            "mae": 14.411279320000004,
+            "mean_signed_error": 7.761968920000002,
+            "normalized_mae_percent": 67.57346774089984
+          }
+        }
+      }
+    },
+    "common_successful_dishes": 50,
+    "paired_calorie_comparisons": {
+      "rf_detr minus vlm_single": {
+        "calorie_mae_difference": 305.54052796,
+        "bootstrap_95_percent_interval": [
+          196.305564299,
+          436.5829490669999
+        ]
+      },
+      "rf_detr minus clip_ensemble": {
+        "calorie_mae_difference": 268.55464520000004,
+        "bootstrap_95_percent_interval": [
+          148.332401324,
+          399.99760609199996
+        ]
+      },
+      "rf_detr minus rag_vlm": {
+        "calorie_mae_difference": 264.16252776,
+        "bootstrap_95_percent_interval": [
+          146.77996060400002,
+          396.16526532899996
+        ]
+      },
+      "vlm_single minus clip_ensemble": {
+        "calorie_mae_difference": -36.98588276,
+        "bootstrap_95_percent_interval": [
+          -87.62808671100001,
+          11.872478685999877
+        ]
+      },
+      "vlm_single minus rag_vlm": {
+        "calorie_mae_difference": -41.378000199999995,
+        "bootstrap_95_percent_interval": [
+          -84.161724556,
+          -2.547276727000004
+        ]
+      },
+      "clip_ensemble minus rag_vlm": {
+        "calorie_mae_difference": -4.392117439999993,
+        "bootstrap_95_percent_interval": [
+          -64.02211271200001,
+          54.06326824700001
+        ]
+      }
+    },
+    "configuration": {
+      "manifest_sha256": "e012a5b5b461f6ced595f47a5e8471fcbb9b2ee609de93b11f1b0cee07adaf83",
+      "model": "stealth/space-bunny-alpha",
+      "max_output_tokens": 8192,
+      "reasoning_effort": "high",
+      "shared_config_sha256": "3824713eed70b0df4e8172a6a2a9aac49cc5139c5e5bb306b0e85e0f1201f1f7",
+      "rf_detr_checkpoint_sha256": "1887a7aef82f628f99144e601eeed4824978960d1716ff13b547de92bfe1019b",
+      "rf_detr_labels_sha256": "fef4b93dc4b8ae2e78de0ec1fd6d0ab1ba6ab845d642a94853a16dd01741c3c0",
+      "code_sha256": {
+        "rf_detr_analyzer.py": "8db9a6222917f2cdc232b8fe87c3f05b2d098201fa2fd931c88c131c08d460d0",
+        "vlm_analyzer.py": "939338e2b4541249267304d40cbd459ff0caed1c286d1d5cf2e6d1454fbf4da2",
+        "clip_analyzer.py": "653e61b8ce3bed80e21b791204490aeda2257936f67e6329c5a46100d1b2d101",
+        "rag_vlm_analyzer.py": "cad0fc0ec1ffa164cb40956bfca909f3d3af0e02f1773cacab9b763abf120353",
+        "nutrition_db.py": "d920ac6723e8e71e28eef8af2f9984e457a5ba8dab682bc45ecfd52ef3d37e48",
+        "base.py": "aedad71b10eaebb742189e5d7da650a6cb325d1e76f43669aaf72279e82025e8",
+        "evaluate_nutrition5k.py": "6bd497b74658b1194884bc460c7a0bf62530f335ebe3a79404f2b45c4fa88d34"
+      }
+    },
+    "initialization_seconds": {
+      "rf_detr": 4.542480333999265,
+      "vlm_single": 0.2928755420143716,
+      "clip_ensemble": 6.603082542016637,
+      "rag_vlm": 0.4053963329643011
+    },
+    "finished_utc": "2026-09-30T21:49:44.477780+00:00",
+    "caveats": [
+      "50-dish pilot; overhead RGB subset only",
+      "Serving priors are not visual mass estimates",
+      "Success-only errors must be read alongside failures",
+      "No ingredient recognition scoring"
+    ]
+  },
+  "predictions": {
+    "rf_detr": {
+      "dish_1561148042": {
+        "prediction": {
+          "calories": 1595,
+          "mass_g": 1515,
+          "fat_g": 54.9,
+          "carbs_g": 194.1,
+          "protein_g": 90.1
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 1.0372222079895437,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1562008979": {
+        "prediction": {
+          "calories": 173.7,
+          "mass_g": 425,
+          "fat_g": 4.3999999999999995,
+          "carbs_g": 18.1,
+          "protein_g": 15.9
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 0.10958179098088294,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1561578839": {
+        "prediction": {
+          "calories": 865.4,
+          "mass_g": 1010,
+          "fat_g": 28.3,
+          "carbs_g": 112.5,
+          "protein_g": 43.6
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09731124999234453,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1558373008": {
+        "prediction": {
+          "calories": 225,
+          "mass_g": 150,
+          "fat_g": 9,
+          "carbs_g": 22.5,
+          "protein_g": 12
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09292108297813684,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1565035746": {
+        "prediction": {
+          "calories": 597,
+          "mass_g": 750,
+          "fat_g": 11.3,
+          "carbs_g": 104.4,
+          "protein_g": 23.5
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.0898695420473814,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1567007719": {
+        "prediction": {
+          "calories": 361.5,
+          "mass_g": 450,
+          "fat_g": 9.5,
+          "carbs_g": 56.5,
+          "protein_g": 14.2
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09322241699555889,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1563389548": {
+        "prediction": {
+          "calories": 389,
+          "mass_g": 700,
+          "fat_g": 14.1,
+          "carbs_g": 33.1,
+          "protein_g": 32.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 0.09589275001781061,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1563998279": {
+        "prediction": {
+          "calories": 688.5,
+          "mass_g": 600,
+          "fat_g": 29.4,
+          "carbs_g": 49.1,
+          "protein_g": 53.5
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.10286458302289248,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1559849412": {
+        "prediction": {
+          "calories": 1156.5,
+          "mass_g": 450,
+          "fat_g": 85.3,
+          "carbs_g": 62.4,
+          "protein_g": 48.9
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.12361645803321153,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1561662190": {
+        "prediction": {
+          "calories": 296.5,
+          "mass_g": 490,
+          "fat_g": 1.2,
+          "carbs_g": 63.7,
+          "protein_g": 8.6
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 0.10565066698472947,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1568305225": {
+        "prediction": {
+          "calories": 704.7,
+          "mass_g": 725,
+          "fat_g": 22.4,
+          "carbs_g": 86,
+          "protein_g": 38.8
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.12212391698267311,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1563984296": {
+        "prediction": {
+          "calories": 957,
+          "mass_g": 1050,
+          "fat_g": 26.8,
+          "carbs_g": 148.6,
+          "protein_g": 35.7
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.10045666701626033,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1561405389": {
+        "prediction": {
+          "calories": 376.2,
+          "mass_g": 425,
+          "fat_g": 13.1,
+          "carbs_g": 36.3,
+          "protein_g": 25.8
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09289937501307577,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1558113941": {
+        "prediction": {
+          "calories": 952.5,
+          "mass_g": 450,
+          "fat_g": 75.39999999999999,
+          "carbs_g": 51.1,
+          "protein_g": 35.3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 0.09685145795810968,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1564689108": {
+        "prediction": {
+          "calories": 972,
+          "mass_g": 300,
+          "fat_g": 75.1,
+          "carbs_g": 59.599999999999994,
+          "protein_g": 32.8
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 0.0983551669633016,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1562009894": {
+        "prediction": {
+          "calories": 556,
+          "mass_g": 640,
+          "fat_g": 10.2,
+          "carbs_g": 94.8,
+          "protein_g": 20.6
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09172949998173863,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1561739265": {
+        "prediction": {
+          "calories": 561.9,
+          "mass_g": 750,
+          "fat_g": 8.8,
+          "carbs_g": 101.9,
+          "protein_g": 24.2
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 0.09303058299701661,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1564773903": {
+        "prediction": {
+          "calories": 605.6,
+          "mass_g": 985,
+          "fat_g": 14.6,
+          "carbs_g": 91.9,
+          "protein_g": 32.3
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09080766700208187,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1558641287": {
+        "prediction": {
+          "calories": 252,
+          "mass_g": 300,
+          "fat_g": 9.3,
+          "carbs_g": 28.3,
+          "protein_g": 13.4
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09606670896755531,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1565117429": {
+        "prediction": {
+          "calories": 675,
+          "mass_g": 450,
+          "fat_g": 27,
+          "carbs_g": 67.5,
+          "protein_g": 36
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.10502008302137256,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1562703345": {
+        "prediction": {
+          "calories": 226.5,
+          "mass_g": 300,
+          "fat_g": 9,
+          "carbs_g": 22.9,
+          "protein_g": 12
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09523708303458989,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1566851704": {
+        "prediction": {
+          "calories": 820.1,
+          "mass_g": 985,
+          "fat_g": 34.199999999999996,
+          "carbs_g": 57,
+          "protein_g": 71.5
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09197737497743219,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1558639440": {
+        "prediction": {
+          "calories": 484.5,
+          "mass_g": 450,
+          "fat_g": 18.6,
+          "carbs_g": 50.4,
+          "protein_g": 28.3
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09586154198041186,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1563565508": {
+        "prediction": {
+          "calories": 575.5,
+          "mass_g": 490,
+          "fat_g": 9.9,
+          "carbs_g": 103.3,
+          "protein_g": 18.1
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09324374998686835,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1565974375": {
+        "prediction": {
+          "calories": 151.2,
+          "mass_g": 275,
+          "fat_g": 4.1,
+          "carbs_g": 13.8,
+          "protein_g": 13.8
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 0.10119720798684284,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1566414412": {
+        "prediction": {
+          "calories": 621.7,
+          "mass_g": 1065,
+          "fat_g": 12.7,
+          "carbs_g": 94.3,
+          "protein_g": 36.1
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 0.09459024999523535,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1561574368": {
+        "prediction": {
+          "calories": 657,
+          "mass_g": 600,
+          "fat_g": 31,
+          "carbs_g": 34.3,
+          "protein_g": 57.7
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09222208295250311,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1558375833": {
+        "prediction": {
+          "calories": 745.5,
+          "mass_g": 300,
+          "fat_g": 30,
+          "carbs_g": 100.5,
+          "protein_g": 19.5
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09192583296680823,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1565035830": {
+        "prediction": {
+          "calories": 858,
+          "mass_g": 1050,
+          "fat_g": 30.7,
+          "carbs_g": 85,
+          "protein_g": 60.9
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09682637505466118,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1566328776": {
+        "prediction": {
+          "calories": 27,
+          "mass_g": 150,
+          "fat_g": 0.3,
+          "carbs_g": 5.8,
+          "protein_g": 1.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 0.09748099994612858,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1563478751": {
+        "prediction": {
+          "calories": 724.2,
+          "mass_g": 725,
+          "fat_g": 33.3,
+          "carbs_g": 36.7,
+          "protein_g": 64.3
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09603179199621081,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1563220987": {
+        "prediction": {
+          "calories": 661.2,
+          "mass_g": 875,
+          "fat_g": 22.6,
+          "carbs_g": 71.8,
+          "protein_g": 41.9
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09110400005010888,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1563996464": {
+        "prediction": {
+          "calories": 481.5,
+          "mass_g": 600,
+          "fat_g": 9.9,
+          "carbs_g": 83.4,
+          "protein_g": 18.8
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09169012500206009,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1561654392": {
+        "prediction": {
+          "calories": 806.6,
+          "mass_g": 1110,
+          "fat_g": 7.699999999999999,
+          "carbs_g": 153.5,
+          "protein_g": 33.2
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 0.09053783299168572,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1566502505": {
+        "prediction": {
+          "calories": 474.1,
+          "mass_g": 777.5,
+          "fat_g": 10.7,
+          "carbs_g": 72.1,
+          "protein_g": 26.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 0.09184083400759846,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1563909580": {
+        "prediction": {
+          "calories": 726.7,
+          "mass_g": 765,
+          "fat_g": 14,
+          "carbs_g": 117.1,
+          "protein_g": 31.9
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09203879098640755,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1558110478": {
+        "prediction": {
+          "calories": 816.1,
+          "mass_g": 927.5,
+          "fat_g": 30,
+          "carbs_g": 89.7,
+          "protein_g": 48.6
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09155437495792285,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1564428144": {
+        "prediction": {
+          "calories": 502.2,
+          "mass_g": 725,
+          "fat_g": 13.7,
+          "carbs_g": 67.8,
+          "protein_g": 28.900000000000002
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.0917020000051707,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1561578865": {
+        "prediction": {
+          "calories": 2154,
+          "mass_g": 1050,
+          "fat_g": 177.9,
+          "carbs_g": 104.8,
+          "protein_g": 40.5
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.0920801250031218,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1565894889": {
+        "prediction": {
+          "calories": 529.5,
+          "mass_g": 450,
+          "fat_g": 18,
+          "carbs_g": 52.4,
+          "protein_g": 36.1
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09750679094577208,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1562690950": {
+        "prediction": {
+          "calories": 290.59999999999997,
+          "mass_g": 685,
+          "fat_g": 5,
+          "carbs_g": 46.900000000000006,
+          "protein_g": 19.1
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 0.09671562496805564,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1559157777": {
+        "prediction": {
+          "calories": 247.5,
+          "mass_g": 300,
+          "fat_g": 9.3,
+          "carbs_g": 26.8,
+          "protein_g": 14.1
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.10125320800580084,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1558372948": {
+        "prediction": {
+          "calories": 1093.5,
+          "mass_g": 300,
+          "fat_g": 83.8,
+          "carbs_g": 54.9,
+          "protein_g": 43.8
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.0954872919828631,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1564773847": {
+        "prediction": {
+          "calories": 488.7,
+          "mass_g": 575,
+          "fat_g": 20.9,
+          "carbs_g": 55.6,
+          "protein_g": 20.400000000000002
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 0.09411320800427347,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1564427430": {
+        "prediction": {
+          "calories": 1209,
+          "mass_g": 450,
+          "fat_g": 91.8,
+          "carbs_g": 73.7,
+          "protein_g": 43
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 0.09872570895822719,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1558639818": {
+        "prediction": {
+          "calories": 586.5,
+          "mass_g": 600,
+          "fat_g": 18.5,
+          "carbs_g": 79,
+          "protein_g": 26.2
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.0959963749628514,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1560800988": {
+        "prediction": {
+          "calories": 647.5,
+          "mass_g": 790,
+          "fat_g": 10.5,
+          "carbs_g": 114.1,
+          "protein_g": 25
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.10052924999035895,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1558461692": {
+        "prediction": {
+          "calories": 2661,
+          "mass_g": 450,
+          "fat_g": 231.39999999999998,
+          "carbs_g": 93.9,
+          "protein_g": 99.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 0.09560037503251806,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1558375667": {
+        "prediction": {
+          "calories": 1779,
+          "mass_g": 300,
+          "fat_g": 155.8,
+          "carbs_g": 63.9,
+          "protein_g": 61.8
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 0.09393304103286937,
+        "http_requests": 0,
+        "response_model_ids": []
+      },
+      "dish_1565638515": {
+        "prediction": {
+          "calories": 769.2,
+          "mass_g": 725,
+          "fat_g": 33.5,
+          "carbs_g": 46.8,
+          "protein_g": 67
+        },
+        "error": null,
+        "used_fallback": true,
+        "inference_seconds": 0.09113358298782259,
+        "http_requests": 0,
+        "response_model_ids": []
+      }
+    },
+    "vlm_single": {
+      "dish_1561148042": {
+        "prediction": {
+          "calories": 661,
+          "mass_g": 568,
+          "fat_g": 23,
+          "carbs_g": 71.8,
+          "protein_g": 46.3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 52.982445708010346,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1562008979": {
+        "prediction": {
+          "calories": 610,
+          "mass_g": 408,
+          "fat_g": 28.3,
+          "carbs_g": 64.5,
+          "protein_g": 28
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 33.1715180829633,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561578839": {
+        "prediction": {
+          "calories": 623,
+          "mass_g": 445,
+          "fat_g": 27.8,
+          "carbs_g": 69.9,
+          "protein_g": 27
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 23.65346750000026,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558373008": {
+        "prediction": {
+          "calories": 340,
+          "mass_g": 190,
+          "fat_g": 12.7,
+          "carbs_g": 53,
+          "protein_g": 3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 18.29673633398488,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565035746": {
+        "prediction": {
+          "calories": 357,
+          "mass_g": 205,
+          "fat_g": 0.3,
+          "carbs_g": 13,
+          "protein_g": 3.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 10.918328707979526,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1567007719": {
+        "prediction": {
+          "calories": 59,
+          "mass_g": 140,
+          "fat_g": 0.3,
+          "carbs_g": 14.7,
+          "protein_g": 1.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 19.120715875003953,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563389548": {
+        "prediction": {
+          "calories": 383,
+          "mass_g": 240,
+          "fat_g": 25.4,
+          "carbs_g": 6.6,
+          "protein_g": 40.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 18.491976500023156,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563998279": {
+        "prediction": {
+          "calories": 818,
+          "mass_g": 423,
+          "fat_g": 33.2,
+          "carbs_g": 37.5,
+          "protein_g": 89.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 24.961621165974066,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1559849412": {
+        "prediction": {
+          "calories": 261,
+          "mass_g": 45,
+          "fat_g": 22.5,
+          "carbs_g": 9.7,
+          "protein_g": 9.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 8.07839837501524,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561662190": {
+        "prediction": {
+          "calories": 328,
+          "mass_g": 248,
+          "fat_g": 12.799999999999999,
+          "carbs_g": 42.1,
+          "protein_g": 13.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 21.294872042024508,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1568305225": {
+        "prediction": {
+          "calories": 578,
+          "mass_g": 510,
+          "fat_g": 15.9,
+          "carbs_g": 102.8,
+          "protein_g": 12.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 63.49894412502181,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563984296": {
+        "prediction": {
+          "calories": 454,
+          "mass_g": 730,
+          "fat_g": 15,
+          "carbs_g": 62.5,
+          "protein_g": 23.1
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 35.77676816697931,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561405389": {
+        "prediction": {
+          "calories": 365,
+          "mass_g": 299,
+          "fat_g": 17.3,
+          "carbs_g": 16.8,
+          "protein_g": 35.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 21.26871845900314,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558113941": {
+        "prediction": {
+          "calories": 343,
+          "mass_g": 133,
+          "fat_g": 28.6,
+          "carbs_g": 14.600000000000001,
+          "protein_g": 12.6
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 11.81230837496696,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1564689108": {
+        "prediction": {
+          "calories": 217,
+          "mass_g": 230,
+          "fat_g": 7.8,
+          "carbs_g": 29.900000000000002,
+          "protein_g": 10.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 34.146640457969625,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1562009894": {
+        "prediction": {
+          "calories": 399,
+          "mass_g": 387,
+          "fat_g": 15.4,
+          "carbs_g": 59,
+          "protein_g": 9
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 13.715199999976903,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561739265": {
+        "prediction": {
+          "calories": 467,
+          "mass_g": 739,
+          "fat_g": 3.4,
+          "carbs_g": 103.8,
+          "protein_g": 15
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 25.98150762496516,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1564773903": {
+        "prediction": {
+          "calories": 480,
+          "mass_g": 565,
+          "fat_g": 19.1,
+          "carbs_g": 37.8,
+          "protein_g": 39.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 33.221461582987104,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558641287": {
+        "prediction": {
+          "calories": 56,
+          "mass_g": 163,
+          "fat_g": 3.3,
+          "carbs_g": 6.2,
+          "protein_g": 1.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 14.344680834037717,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565117429": {
+        "prediction": {
+          "calories": 715,
+          "mass_g": 293,
+          "fat_g": 31.3,
+          "carbs_g": 80.5,
+          "protein_g": 27
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 19.397157625004184,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1562703345": {
+        "prediction": {
+          "calories": 296,
+          "mass_g": 115,
+          "fat_g": 11.4,
+          "carbs_g": 33,
+          "protein_g": 16.2
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 21.422477666987106,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1566851704": {
+        "prediction": {
+          "calories": 1072,
+          "mass_g": 632,
+          "fat_g": 43.1,
+          "carbs_g": 92.1,
+          "protein_g": 72.2
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 26.322400167002343,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558639440": {
+        "prediction": {
+          "calories": 78,
+          "mass_g": 150,
+          "fat_g": 0.3,
+          "carbs_g": 20.7,
+          "protein_g": 0.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 2.932004833011888,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563565508": {
+        "prediction": {
+          "calories": 512,
+          "mass_g": 492,
+          "fat_g": 16.7,
+          "carbs_g": 38.6,
+          "protein_g": 49.1
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 27.04595249996055,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565974375": {
+        "prediction": {
+          "calories": 352,
+          "mass_g": 65,
+          "fat_g": 27.3,
+          "carbs_g": 0.9,
+          "protein_g": 24.1
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 4.524418749962933,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1566414412": {
+        "prediction": {
+          "calories": 569,
+          "mass_g": 488,
+          "fat_g": 24,
+          "carbs_g": 47.4,
+          "protein_g": 42.3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 47.137336749990936,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561574368": {
+        "prediction": {
+          "calories": 204,
+          "mass_g": 111,
+          "fat_g": 12.7,
+          "carbs_g": 15.4,
+          "protein_g": 6.3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 21.762091249984223,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558375833": {
+        "prediction": {
+          "calories": 450,
+          "mass_g": 300,
+          "fat_g": 11.7,
+          "carbs_g": 102,
+          "protein_g": 2.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 17.886720917013008,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565035830": {
+        "prediction": {
+          "calories": 364,
+          "mass_g": 455,
+          "fat_g": 7.4,
+          "carbs_g": 13.7,
+          "protein_g": 59.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 15.316905207990203,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1566328776": {
+        "prediction": {
+          "calories": 1373,
+          "mass_g": 720,
+          "fat_g": 34.1,
+          "carbs_g": 148.5,
+          "protein_g": 106.9
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 42.79044804198202,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563478751": {
+        "prediction": {
+          "calories": 583,
+          "mass_g": 400,
+          "fat_g": 21.3,
+          "carbs_g": 57.699999999999996,
+          "protein_g": 37.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 31.04407279199222,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563220987": {
+        "prediction": {
+          "calories": 209,
+          "mass_g": 133,
+          "fat_g": 4.6,
+          "carbs_g": 2.4,
+          "protein_g": 37.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 15.945785874966532,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563996464": {
+        "prediction": {
+          "calories": 111,
+          "mass_g": 305,
+          "fat_g": 5.7,
+          "carbs_g": 13.100000000000001,
+          "protein_g": 5.6
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 10.057457167014945,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561654392": {
+        "prediction": {
+          "calories": 633,
+          "mass_g": 310,
+          "fat_g": 48.8,
+          "carbs_g": 8.6,
+          "protein_g": 40.8
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 24.81763383402722,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1566502505": {
+        "prediction": {
+          "calories": 317,
+          "mass_g": 300,
+          "fat_g": 7.8,
+          "carbs_g": 12.1,
+          "protein_g": 49
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 28.868263833981473,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563909580": {
+        "prediction": {
+          "calories": 668,
+          "mass_g": 575,
+          "fat_g": 19.4,
+          "carbs_g": 73.3,
+          "protein_g": 53.6
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 25.36901366704842,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558110478": {
+        "prediction": {
+          "calories": 797,
+          "mass_g": 460,
+          "fat_g": 44.3,
+          "carbs_g": 50,
+          "protein_g": 47.3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 23.079026042018086,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1564428144": {
+        "prediction": {
+          "calories": 289,
+          "mass_g": 268,
+          "fat_g": 12.8,
+          "carbs_g": 5.4,
+          "protein_g": 37.300000000000004
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 17.715356207976583,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561578865": {
+        "prediction": {
+          "calories": 791,
+          "mass_g": 510,
+          "fat_g": 37.5,
+          "carbs_g": 87.4,
+          "protein_g": 28.3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 45.0519989579916,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565894889": {
+        "prediction": {
+          "calories": 600,
+          "mass_g": 195,
+          "fat_g": 26.5,
+          "carbs_g": 66,
+          "protein_g": 17
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 12.933652582985815,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1562690950": {
+        "prediction": {
+          "calories": 218,
+          "mass_g": 475,
+          "fat_g": 1.3,
+          "carbs_g": 52.6,
+          "protein_g": 5.8
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 16.368899833003525,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1559157777": {
+        "prediction": {
+          "calories": 16,
+          "mass_g": 70,
+          "fat_g": 0.3,
+          "carbs_g": 2.5,
+          "protein_g": 2
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 4.911835542006884,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558372948": {
+        "prediction": {
+          "calories": 659,
+          "mass_g": 110,
+          "fat_g": 57.8,
+          "carbs_g": 23.8,
+          "protein_g": 23.3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 12.960893791983835,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1564773847": {
+        "prediction": {
+          "calories": 197,
+          "mass_g": 190,
+          "fat_g": 6.8999999999999995,
+          "carbs_g": 16.1,
+          "protein_g": 22.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 43.50053420802578,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1564427430": {
+        "prediction": {
+          "calories": 410,
+          "mass_g": 270,
+          "fat_g": 6.8,
+          "carbs_g": 21.7,
+          "protein_g": 62.599999999999994
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 10.289940374961589,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558639818": {
+        "prediction": {
+          "calories": 78,
+          "mass_g": 230,
+          "fat_g": 0.5,
+          "carbs_g": 18.6,
+          "protein_g": 1.9
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 12.324612417025492,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1560800988": {
+        "prediction": {
+          "calories": 381,
+          "mass_g": 459,
+          "fat_g": 15.799999999999999,
+          "carbs_g": 50.199999999999996,
+          "protein_g": 13.3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 36.65245087497169,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558461692": {
+        "prediction": {
+          "calories": 203,
+          "mass_g": 35,
+          "fat_g": 17.5,
+          "carbs_g": 7.6,
+          "protein_g": 7.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 6.895106125040911,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558375667": {
+        "prediction": {
+          "calories": 579,
+          "mass_g": 100,
+          "fat_g": 49.9,
+          "carbs_g": 21.6,
+          "protein_g": 21.2
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 11.191856792022008,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565638515": {
+        "prediction": {
+          "calories": 295,
+          "mass_g": 295,
+          "fat_g": 10.7,
+          "carbs_g": 14.3,
+          "protein_g": 36.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 91.1598836670164,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      }
+    },
+    "clip_ensemble": {
+      "dish_1561148042": {
+        "prediction": {
+          "calories": 480.8,
+          "mass_g": 510,
+          "fat_g": 10,
+          "carbs_g": 31.4,
+          "protein_g": 64.3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 10.693078499985859,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1562008979": {
+        "prediction": {
+          "calories": 375,
+          "mass_g": 250,
+          "fat_g": 15,
+          "carbs_g": 37.5,
+          "protein_g": 20
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 5.794720000005327,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561578839": {
+        "prediction": {
+          "calories": 605.8,
+          "mass_g": 370,
+          "fat_g": 22.5,
+          "carbs_g": 75.89999999999999,
+          "protein_g": 27.6
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 11.50966141698882,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558373008": {
+        "prediction": {
+          "calories": 129,
+          "mass_g": 150,
+          "fat_g": 0.2,
+          "carbs_g": 30.2,
+          "protein_g": 2.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 9.847198083996773,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565035746": {
+        "prediction": {
+          "calories": 112.5,
+          "mass_g": 225,
+          "fat_g": 3.2,
+          "carbs_g": 15.8,
+          "protein_g": 7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 8.472115207987372,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1567007719": {
+        "prediction": {
+          "calories": 45,
+          "mass_g": 100,
+          "fat_g": 0.2,
+          "carbs_g": 10.4,
+          "protein_g": 0.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 13.82142729201587,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563389548": {
+        "prediction": {
+          "calories": 285,
+          "mass_g": 150,
+          "fat_g": 11.1,
+          "carbs_g": 0,
+          "protein_g": 42
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 5.479773459024727,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563998279": {
+        "prediction": {
+          "calories": 716.1,
+          "mass_g": 430,
+          "fat_g": 32.1,
+          "carbs_g": 22.4,
+          "protein_g": 80.19999999999999
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 10.222261791990604,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1559849412": {
+        "prediction": {
+          "calories": 231.6,
+          "mass_g": 40,
+          "fat_g": 20,
+          "carbs_g": 8.6,
+          "protein_g": 8.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 14.628004542028066,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561662190": {
+        "prediction": {
+          "calories": 330.2,
+          "mass_g": 320,
+          "fat_g": 15.3,
+          "carbs_g": 31,
+          "protein_g": 16.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 14.085817000013776,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1568305225": {
+        "prediction": {
+          "calories": 495,
+          "mass_g": 330,
+          "fat_g": 19.8,
+          "carbs_g": 49.5,
+          "protein_g": 26.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 3.042824834003113,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563984296": {
+        "prediction": {
+          "calories": 814.4,
+          "mass_g": 950,
+          "fat_g": 38.9,
+          "carbs_g": 74.9,
+          "protein_g": 46.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 16.496088375046384,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561405389": {
+        "prediction": {
+          "calories": 438,
+          "mass_g": 320,
+          "fat_g": 15,
+          "carbs_g": 28,
+          "protein_g": 46.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 6.587707625003532,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558113941": {
+        "prediction": {
+          "calories": 422,
+          "mass_g": 197,
+          "fat_g": 33.6,
+          "carbs_g": 20.1,
+          "protein_g": 18.3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 8.28104525001254,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1564689108": {
+        "prediction": {
+          "calories": 335.7,
+          "mass_g": 248,
+          "fat_g": 8.200000000000001,
+          "carbs_g": 47.6,
+          "protein_g": 18.8
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 13.101374999969266,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1562009894": {
+        "prediction": {
+          "calories": 348.40000000000003,
+          "mass_g": 490,
+          "fat_g": 9.1,
+          "carbs_g": 57.7,
+          "protein_g": 9.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 8.270628582977224,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561739265": {
+        "prediction": {
+          "calories": 791.6,
+          "mass_g": 584,
+          "fat_g": 26.5,
+          "carbs_g": 122,
+          "protein_g": 20.400000000000002
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 9.727026500040665,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1564773903": {
+        "prediction": {
+          "calories": 354,
+          "mass_g": 380,
+          "fat_g": 11.3,
+          "carbs_g": 47.1,
+          "protein_g": 17.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 9.86368637502892,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558641287": {
+        "prediction": {
+          "calories": 150,
+          "mass_g": 100,
+          "fat_g": 6,
+          "carbs_g": 15,
+          "protein_g": 8
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 9.511600165977143,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565117429": {
+        "prediction": {
+          "calories": 1407,
+          "mass_g": 350,
+          "fat_g": 115.9,
+          "carbs_g": 4.5,
+          "protein_g": 87.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 9.084355583996512,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1562703345": {
+        "prediction": {
+          "calories": 150,
+          "mass_g": 100,
+          "fat_g": 6,
+          "carbs_g": 15,
+          "protein_g": 8
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 13.787111084035132,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1566851704": {
+        "prediction": {
+          "calories": 891,
+          "mass_g": 565,
+          "fat_g": 30.5,
+          "carbs_g": 77.5,
+          "protein_g": 74.8
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 8.272258625016548,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558639440": {
+        "prediction": {
+          "calories": 83.2,
+          "mass_g": 160,
+          "fat_g": 0.3,
+          "carbs_g": 22.1,
+          "protein_g": 0.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 9.946391500008758,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563565508": {
+        "prediction": {
+          "calories": 287,
+          "mass_g": 295,
+          "fat_g": 8,
+          "carbs_g": 15.7,
+          "protein_g": 35.9
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 15.261520291969646,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565974375": {
+        "prediction": {
+          "calories": 115.2,
+          "mass_g": 120,
+          "fat_g": 1.8,
+          "carbs_g": 25.2,
+          "protein_g": 4.1
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 4.85124458296923,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1566414412": {
+        "prediction": {
+          "calories": 287.9,
+          "mass_g": 420,
+          "fat_g": 9.1,
+          "carbs_g": 38.1,
+          "protein_g": 13.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 15.59893012495013,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561574368": {
+        "prediction": {
+          "calories": 20,
+          "mass_g": 100,
+          "fat_g": 0.2,
+          "carbs_g": 3.5,
+          "protein_g": 1.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 8.120508791995235,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558375833": {
+        "prediction": {
+          "calories": 330,
+          "mass_g": 220,
+          "fat_g": 13.2,
+          "carbs_g": 33,
+          "protein_g": 17.6
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 33.0607140409993,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565035830": {
+        "prediction": {
+          "calories": 455.3,
+          "mass_g": 455,
+          "fat_g": 11.9,
+          "carbs_g": 26.9,
+          "protein_g": 57.8
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 10.069631834048778,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1566328776": {
+        "prediction": {
+          "calories": 1123.2,
+          "mass_g": 595,
+          "fat_g": 38.1,
+          "carbs_g": 100.39999999999999,
+          "protein_g": 92
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 36.007261708029546,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563478751": {
+        "prediction": {
+          "calories": 321.40000000000003,
+          "mass_g": 400,
+          "fat_g": 2.4,
+          "carbs_g": 56.3,
+          "protein_g": 12.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 2.9565729169989936,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563220987": {
+        "prediction": {
+          "calories": 521,
+          "mass_g": 290,
+          "fat_g": 18,
+          "carbs_g": 1.5,
+          "protein_g": 82.6
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 16.57311891601421,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563996464": {
+        "prediction": {
+          "calories": 144,
+          "mass_g": 260,
+          "fat_g": 4.4,
+          "carbs_g": 18.900000000000002,
+          "protein_g": 8.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 8.1633546249941,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561654392": {
+        "prediction": {
+          "calories": 336.1,
+          "mass_g": 345,
+          "fat_g": 18,
+          "carbs_g": 23.400000000000002,
+          "protein_g": 24.1
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 6.597159792028833,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1566502505": {
+        "prediction": {
+          "calories": 391,
+          "mass_g": 360,
+          "fat_g": 10.7,
+          "carbs_g": 23.8,
+          "protein_g": 48.300000000000004
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 12.072365709056612,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563909580": {
+        "prediction": {
+          "calories": 601.9,
+          "mass_g": 690,
+          "fat_g": 14.4,
+          "carbs_g": 92.3,
+          "protein_g": 28.400000000000002
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 8.37453812500462,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558110478": {
+        "prediction": {
+          "calories": 588.2,
+          "mass_g": 480,
+          "fat_g": 22.2,
+          "carbs_g": 66.2,
+          "protein_g": 33.6
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 14.543358209019061,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1564428144": {
+        "prediction": {
+          "calories": 393.5,
+          "mass_g": 205,
+          "fat_g": 23.1,
+          "carbs_g": 28.6,
+          "protein_g": 16.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 11.260652707947884,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561578865": {
+        "prediction": {
+          "calories": 978.9000000000001,
+          "mass_g": 555,
+          "fat_g": 34.3,
+          "carbs_g": 124.8,
+          "protein_g": 44.8
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 6.333895209012553,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565894889": {
+        "prediction": {
+          "calories": 674.0999999999999,
+          "mass_g": 185,
+          "fat_g": 32.7,
+          "carbs_g": 78.6,
+          "protein_g": 16.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 11.975613375019748,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1562690950": {
+        "prediction": {
+          "calories": 146.4,
+          "mass_g": 345,
+          "fat_g": 0.8,
+          "carbs_g": 34.7,
+          "protein_g": 4.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 7.045476375031285,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1559157777": {
+        "prediction": {
+          "calories": 23,
+          "mass_g": 100,
+          "fat_g": 0.4,
+          "carbs_g": 3.6,
+          "protein_g": 2.9
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 9.727688874991145,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558372948": {
+        "prediction": {
+          "calories": 636.9,
+          "mass_g": 110,
+          "fat_g": 54.9,
+          "carbs_g": 23.8,
+          "protein_g": 23.3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 8.903958124981727,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1564773847": {
+        "prediction": {
+          "calories": 335.5,
+          "mass_g": 185,
+          "fat_g": 18.5,
+          "carbs_g": 12.8,
+          "protein_g": 27.2
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 13.65800766699249,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1564427430": {
+        "prediction": {
+          "calories": 475.3,
+          "mass_g": 280,
+          "fat_g": 14.6,
+          "carbs_g": 20.5,
+          "protein_g": 61
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 12.55224237497896,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558639818": {
+        "prediction": {
+          "calories": 66,
+          "mass_g": 110,
+          "fat_g": 0.4,
+          "carbs_g": 16.5,
+          "protein_g": 0.9
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 6.043098124966491,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1560800988": {
+        "prediction": {
+          "calories": 564,
+          "mass_g": 525,
+          "fat_g": 16.1,
+          "carbs_g": 68.3,
+          "protein_g": 35.3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 14.325508125009947,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558461692": {
+        "prediction": {
+          "calories": 231.6,
+          "mass_g": 40,
+          "fat_g": 20,
+          "carbs_g": 8.6,
+          "protein_g": 8.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 7.166630166990217,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558375667": {
+        "prediction": {
+          "calories": 492.1,
+          "mass_g": 85,
+          "fat_g": 42.4,
+          "carbs_g": 18.4,
+          "protein_g": 18
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 8.998578667000402,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565638515": {
+        "prediction": {
+          "calories": 600,
+          "mass_g": 385,
+          "fat_g": 19.5,
+          "carbs_g": 35.2,
+          "protein_g": 65.3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 13.707709499984048,
+        "http_requests": 1,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      }
+    },
+    "rag_vlm": {
+      "dish_1561148042": {
+        "prediction": {
+          "calories": 657,
+          "mass_g": 780,
+          "fat_g": 25.3,
+          "carbs_g": 93.8,
+          "protein_g": 22.8
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 33.3602016660152,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1562008979": {
+        "prediction": {
+          "calories": 570,
+          "mass_g": 420,
+          "fat_g": 22.5,
+          "carbs_g": 42,
+          "protein_g": 32
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 21.13928266701987,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561578839": {
+        "prediction": {
+          "calories": 584,
+          "mass_g": 470,
+          "fat_g": 22.4,
+          "carbs_g": 73.6,
+          "protein_g": 25.3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 27.57968445797451,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558373008": {
+        "prediction": {
+          "calories": 166,
+          "mass_g": 200,
+          "fat_g": 4.6,
+          "carbs_g": 28,
+          "protein_g": 3.8
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 16.10278879199177,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565035746": {
+        "prediction": {
+          "calories": 291,
+          "mass_g": 195,
+          "fat_g": 21,
+          "carbs_g": 5.9,
+          "protein_g": 20
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 27.650144333019853,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1567007719": {
+        "prediction": {
+          "calories": 54,
+          "mass_g": 120,
+          "fat_g": 0.1,
+          "carbs_g": 14,
+          "protein_g": 1.2
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 15.846755957987625,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563389548": {
+        "prediction": {
+          "calories": 324,
+          "mass_g": 180,
+          "fat_g": 21.6,
+          "carbs_g": 7.2,
+          "protein_g": 27
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 21.127241124981083,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563998279": {
+        "prediction": {
+          "calories": 753,
+          "mass_g": 450,
+          "fat_g": 43.3,
+          "carbs_g": 42.1,
+          "protein_g": 49.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 57.13886991603067,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1559849412": {
+        "prediction": {
+          "calories": 290,
+          "mass_g": 50,
+          "fat_g": 25,
+          "carbs_g": 10.8,
+          "protein_g": 10.6
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 22.100158707995433,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561662190": {
+        "prediction": {
+          "calories": 544.6,
+          "mass_g": 410,
+          "fat_g": 28.6,
+          "carbs_g": 33.8,
+          "protein_g": 38.300000000000004
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 39.53249833302107,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1568305225": {
+        "prediction": {
+          "calories": 787.2,
+          "mass_g": 420,
+          "fat_g": 66.3,
+          "carbs_g": 15,
+          "protein_g": 35.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 35.27048041700618,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563984296": {
+        "prediction": {
+          "calories": 671,
+          "mass_g": 680,
+          "fat_g": 30.4,
+          "carbs_g": 74.2,
+          "protein_g": 32.6
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 54.81347954197554,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561405389": {
+        "prediction": {
+          "calories": 439.3,
+          "mass_g": 445,
+          "fat_g": 15.19,
+          "carbs_g": 15.2,
+          "protein_g": 60.61
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 37.15577737498097,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558113941": {
+        "prediction": {
+          "calories": 364,
+          "mass_g": 170,
+          "fat_g": 30.2,
+          "carbs_g": 15.8,
+          "protein_g": 13.6
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 20.787901417003013,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1564689108": {
+        "prediction": {
+          "calories": 668.6,
+          "mass_g": 315,
+          "fat_g": 53.9,
+          "carbs_g": 36.5,
+          "protein_g": 14.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 43.41817779204575,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1562009894": {
+        "prediction": {
+          "calories": 431,
+          "mass_g": 380,
+          "fat_g": 17,
+          "carbs_g": 61.2,
+          "protein_g": 10.2
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 18.970146333042067,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561739265": {
+        "prediction": {
+          "calories": 1123.8,
+          "mass_g": 495,
+          "fat_g": 50.75,
+          "carbs_g": 153.61,
+          "protein_g": 16.16
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 37.53868962498382,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1564773903": {
+        "prediction": {
+          "calories": 441,
+          "mass_g": 540,
+          "fat_g": 21.5,
+          "carbs_g": 38,
+          "protein_g": 31.6
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 29.385842957999557,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558641287": {
+        "prediction": {
+          "calories": 22,
+          "mass_g": 120,
+          "fat_g": 0.2,
+          "carbs_g": 4.7,
+          "protein_g": 1.1
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 13.605797333002556,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565117429": {
+        "prediction": {
+          "calories": 798,
+          "mass_g": 300,
+          "fat_g": 31.2,
+          "carbs_g": 99,
+          "protein_g": 33
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 27.40897087502526,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1562703345": {
+        "prediction": {
+          "calories": 378,
+          "mass_g": 140,
+          "fat_g": 20.3,
+          "carbs_g": 35,
+          "protein_g": 18.2
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 15.053198624984361,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1566851704": {
+        "prediction": {
+          "calories": 848,
+          "mass_g": 555,
+          "fat_g": 35.800000000000004,
+          "carbs_g": 66.7,
+          "protein_g": 61.8
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 32.01488574995892,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558639440": {
+        "prediction": {
+          "calories": 83.2,
+          "mass_g": 160,
+          "fat_g": 0.27,
+          "carbs_g": 22.1,
+          "protein_g": 0.42
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 23.381260541034862,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563565508": {
+        "prediction": {
+          "calories": 524,
+          "mass_g": 547,
+          "fat_g": 16.5,
+          "carbs_g": 47.1,
+          "protein_g": 47.900000000000006
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 44.03309891698882,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565974375": {
+        "prediction": {
+          "calories": 430,
+          "mass_g": 100,
+          "fat_g": 34,
+          "carbs_g": 0.5,
+          "protein_g": 28
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 16.662055291002616,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1566414412": {
+        "prediction": {
+          "calories": 619.8,
+          "mass_g": 665,
+          "fat_g": 28.7,
+          "carbs_g": 72.4,
+          "protein_g": 18
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 75.28209237498231,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561574368": {
+        "prediction": {
+          "calories": 210,
+          "mass_g": 200,
+          "fat_g": 12.9,
+          "carbs_g": 7.4,
+          "protein_g": 12.2
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 58.8276285000029,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558375833": {
+        "prediction": {
+          "calories": 206.4,
+          "mass_g": 240,
+          "fat_g": 0.24,
+          "carbs_g": 48.24,
+          "protein_g": 3.84
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 21.54965966695454,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565035830": {
+        "prediction": {
+          "calories": 392.9,
+          "mass_g": 500,
+          "fat_g": 7.4,
+          "carbs_g": 20.1,
+          "protein_g": 60.8
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 17.99124879098963,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1566328776": {
+        "prediction": {
+          "calories": 1205,
+          "mass_g": 605,
+          "fat_g": 38.1,
+          "carbs_g": 97.89999999999999,
+          "protein_g": 101.3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 29.98714379098965,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563478751": {
+        "prediction": {
+          "calories": 860,
+          "mass_g": 470,
+          "fat_g": 23.1,
+          "carbs_g": 75.2,
+          "protein_g": 61.7
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 23.16485908301547,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563220987": {
+        "prediction": {
+          "calories": 298,
+          "mass_g": 188,
+          "fat_g": 8.9,
+          "carbs_g": 0.8999999999999999,
+          "protein_g": 50.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 18.996292959025595,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563996464": {
+        "prediction": {
+          "calories": 65.5,
+          "mass_g": 290,
+          "fat_g": 0.8,
+          "carbs_g": 12.4,
+          "protein_g": 5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 16.595403374987654,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561654392": {
+        "prediction": {
+          "calories": 769,
+          "mass_g": 390,
+          "fat_g": 58.2,
+          "carbs_g": 7.6,
+          "protein_g": 54.400000000000006
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 32.848769083968364,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1566502505": {
+        "prediction": {
+          "calories": 581.9,
+          "mass_g": 545,
+          "fat_g": 20.2,
+          "carbs_g": 47.980000000000004,
+          "protein_g": 51.42
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 53.0899959160015,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1563909580": {
+        "prediction": {
+          "calories": 848,
+          "mass_g": 630,
+          "fat_g": 29.6,
+          "carbs_g": 115.3,
+          "protein_g": 26.6
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 36.80688770796405,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558110478": {
+        "prediction": {
+          "calories": 1062.6,
+          "mass_g": 455,
+          "fat_g": 62.1,
+          "carbs_g": 87.3,
+          "protein_g": 39.6
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 29.66399316699244,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1564428144": {
+        "prediction": {
+          "calories": 314,
+          "mass_g": 255,
+          "fat_g": 15.2,
+          "carbs_g": 2.1,
+          "protein_g": 42
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 21.457227292004973,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1561578865": {
+        "prediction": {
+          "calories": 696,
+          "mass_g": 440,
+          "fat_g": 33.2,
+          "carbs_g": 77.89999999999999,
+          "protein_g": 25.400000000000002
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 61.030682208016515,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565894889": {
+        "prediction": {
+          "calories": 585,
+          "mass_g": 190,
+          "fat_g": 25.1,
+          "carbs_g": 76.4,
+          "protein_g": 16.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 16.818564790999517,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1562690950": {
+        "prediction": {
+          "calories": 246.8,
+          "mass_g": 350,
+          "fat_g": 8.97,
+          "carbs_g": 43.32,
+          "protein_g": 4.49
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 31.226150832953863,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1559157777": {
+        "prediction": {
+          "calories": 18.4,
+          "mass_g": 80,
+          "fat_g": 0.3,
+          "carbs_g": 2.9,
+          "protein_g": 2.3
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 17.56295312498696,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558372948": {
+        "prediction": {
+          "calories": 463,
+          "mass_g": 80,
+          "fat_g": 39.9,
+          "carbs_g": 17.3,
+          "protein_g": 17
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 18.72727308300091,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1564773847": {
+        "prediction": {
+          "calories": 197,
+          "mass_g": 190,
+          "fat_g": 10.2,
+          "carbs_g": 3.9,
+          "protein_g": 25.2
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 27.934914459008723,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1564427430": {
+        "prediction": {
+          "calories": 370.9,
+          "mass_g": 225,
+          "fat_g": 10.700000000000001,
+          "carbs_g": 14.4,
+          "protein_g": 51.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 31.45403249998344,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558639818": {
+        "prediction": {
+          "calories": 108,
+          "mass_g": 240,
+          "fat_g": 0.3,
+          "carbs_g": 28.1,
+          "protein_g": 2.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 23.801349833025597,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1560800988": {
+        "prediction": {
+          "calories": 273,
+          "mass_g": 450,
+          "fat_g": 5.8,
+          "carbs_g": 47.8,
+          "protein_g": 11.6
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 58.804086124990135,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558461692": {
+        "prediction": {
+          "calories": 261,
+          "mass_g": 45,
+          "fat_g": 22.5,
+          "carbs_g": 9.7,
+          "protein_g": 9.5
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 13.76406312501058,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1558375667": {
+        "prediction": {
+          "calories": 550,
+          "mass_g": 95,
+          "fat_g": 47.4,
+          "carbs_g": 20.5,
+          "protein_g": 20.1
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 21.606456791982055,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      },
+      "dish_1565638515": {
+        "prediction": {
+          "calories": 561,
+          "mass_g": 340,
+          "fat_g": 12.3,
+          "carbs_g": 0,
+          "protein_g": 105.4
+        },
+        "error": null,
+        "used_fallback": false,
+        "inference_seconds": 33.67786187498132,
+        "http_requests": 2,
+        "response_model_ids": [
+          "stealth/space-bunny-alpha"
+        ]
+      }
+    }
+  },
+  "low_snapshot_sha256": "03f81ae7679a0e4c51c1ad4994ec69a7f6fc6a0575df748fe6d6c7b56920f331",
+  "execution_notes": [
+    "API methods ran in separate processes with 10.2 seconds between HTTP requests per process.",
+    "The first 36 single-shot predictions ran sequentially with a 3.2-second request interval.",
+    "An interrupted in-flight single-shot request is not included in per-prediction usage totals.",
+    "Elapsed times include throttling and are not controlled latency comparisons against the low run.",
+    "Both runs used the same 50 images, checkpoint, nutrition database, prompts, temperature, and 8192-token output budget.",
+    "One run per reasoning level of a mutable model alias; bootstrap intervals reflect dish sampling, not repeat-generation variability."
+  ],
+  "reasoning_comparison": {
+    "rf_detr": {
+      "common_successful_dishes": 50,
+      "low_calorie_mae": 464.9315540999999,
+      "high_calorie_mae": 464.9315540999999,
+      "high_minus_low_calorie_mae": 0,
+      "bootstrap_95_percent_interval": [
+        0,
+        0
+      ]
+    },
+    "vlm_single": {
+      "common_successful_dishes": 49,
+      "low_calorie_mae": 164.26215673469386,
+      "high_calorie_mae": 160.11964959183672,
+      "high_minus_low_calorie_mae": -4.14250714285714,
+      "bootstrap_95_percent_interval": [
+        -28.541655545918363,
+        20.583665038775514
+      ]
+    },
+    "clip_ensemble": {
+      "common_successful_dishes": 50,
+      "low_calorie_mae": 157.03625174,
+      "high_calorie_mae": 196.3769089,
+      "high_minus_low_calorie_mae": 39.340657160000006,
+      "bootstrap_95_percent_interval": [
+        -5.584661822999999,
+        89.41971005999993
+      ]
+    },
+    "rag_vlm": {
+      "common_successful_dishes": 49,
+      "low_calorie_mae": 206.30899091836736,
+      "high_calorie_mae": 204.6524758571429,
+      "high_minus_low_calorie_mae": -1.6565150612244934,
+      "bootstrap_95_percent_interval": [
+        -42.709280677551014,
+        41.205850984693846
+      ]
+    }
+  }
+}

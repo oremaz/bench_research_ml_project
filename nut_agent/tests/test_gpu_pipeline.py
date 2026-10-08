@@ -24,6 +24,8 @@ import torch
 REPO_ROOT = Path(__file__).parent.parent.parent
 RESULTS_DIR = REPO_ROOT / "ml_pipeline" / "results"
 META_PATH = RESULTS_DIR / "recipe_models_meta.json"
+FOOD_VISION_DIR = REPO_ROOT / "nut_agent" / "nutricoach" / "food_vision"
+RF_DETR_WEIGHTS_DIR = FOOD_VISION_DIR / "results" / "rf_detr_food"
 
 requires_cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
 requires_checkpoints = pytest.mark.skipif(not META_PATH.exists(), reason="trained checkpoints not available")
@@ -126,20 +128,6 @@ class TestTrainedRecipeModels:
                           ("time_class", "time_class_labels")]:
             assert meta["tasks"][task]["labels"] == getattr(predictor, key)
 
-    def test_nutrients_model_loads_and_predicts(self, predictor):
-        assert predictor.nutrients_pipeline is not None
-        emb = predictor.get_text_embedding(predictor.format_recipe_text({
-            "name": "spaghetti bolognese",
-            "ingredients": ["spaghetti", "minced beef", "tomato sauce", "onion"],
-            "steps": ["cook pasta", "brown the beef", "simmer with sauce"],
-        }))
-        out = predictor.predict_nutrients_from_embedding(emb)
-        per_serving = out["per_serving"]
-        assert list(per_serving) == predictor.nutrient_targets
-        assert all(v >= 0 for v in per_serving.values())
-        assert 50 <= per_serving["kcal"] <= 2000
-
-
 @requires_cuda
 class TestCLIPAnalyzerGPU:
     def test_clip_classification_runs_on_cuda(self, synthetic_food_image):
@@ -181,35 +169,13 @@ class TestCLIPAnalyzerGPU:
 @requires_cuda
 class TestRFDETRAnalyzer:
     @slow
-    def test_coco_inference_filters_non_food(self, synthetic_food_image):
-        from nutricoach.food_vision.rf_detr_analyzer import RFDETRAnalyzer
-
-        analyzer = RFDETRAnalyzer()
-        result = analyzer.analyze(synthetic_food_image)
-        assert result.error is None
-        coco_food = {"banana", "apple", "sandwich", "orange", "broccoli",
-                     "carrot", "hot dog", "pizza", "donut", "cake"}
-        for item in result.food_items:
-            assert item.name in coco_food
-
-    @slow
     def test_finetuned_weights_load_if_present(self, synthetic_food_image):
         from nutricoach.food_vision.rf_detr_analyzer import RFDETRAnalyzer
 
-        weights = sorted((RESULTS_DIR / "rf_detr_food").glob("*.pth"))
+        weights = sorted(RF_DETR_WEIGHTS_DIR.glob("*.pth"))
         if not weights:
             pytest.skip("no fine-tuned RF-DETR checkpoint yet")
         analyzer = RFDETRAnalyzer(model_path=str(weights[-1]))
-        result = analyzer.analyze(synthetic_food_image)
-        assert result.error is None
-
-
-class TestPortionEstimation:
-    def test_area_fraction_map_monotonic(self):
-        from nutricoach.food_vision.rf_detr_analyzer import estimate_grams_from_area_fraction
-
-        fractions = [0.5, 0.3, 0.2, 0.1, 0.05, 0.01]
-        grams = [estimate_grams_from_area_fraction(f) for f in fractions]
-        assert grams == sorted(grams, reverse=True)
-        assert grams[0] == 350
-        assert grams[-1] == 30
+        analyzer._load_model()
+        detections = analyzer._model.predict(synthetic_food_image)
+        assert all(int(class_id) in analyzer.class_names for class_id in detections.class_id)

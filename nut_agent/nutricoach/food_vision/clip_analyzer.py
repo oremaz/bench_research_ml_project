@@ -1,14 +1,16 @@
 """
-Method 3: CLIP Zero-Shot + LLM Ensemble.
+Method 3: CLIP food candidates + VLM refinement + nutrition lookup.
 
 Pipeline:
   1. CLIP vision encoder extracts image embeddings
-  2. Zero-shot classification against a food label bank (150+ food categories)
-  3. Top-K food candidates are sent to an LLM for portion/nutrition reasoning
-  4. Nutrition DB provides final calorie/macro values
+  2. Whole-image zero-shot classification ranks a fixed food label bank
+  3. The image and top-K candidates are sent to a VLM to refine foods and grams
+  4. Python scales nutrition DB values by the estimated grams
 
-This hybrid approach combines CLIP's visual understanding with LLM reasoning,
-avoiding the cost of sending the full image to the LLM API.
+CLIP candidates are competing image labels, not object detections or counts.
+The refinement call sends the full image to OpenRouter. Without an API key,
+or if refinement fails, each candidate is assigned a default 150g portion.
+Unmatched nutrition lookups use generic average values.
 
 Requires:
   pip install transformers torch Pillow openai
@@ -20,7 +22,7 @@ import os
 import time
 from typing import List, Optional, Tuple
 
-from shared.config import OPENROUTER_MODEL_ID
+from shared.config import OPENROUTER_MODEL_ID, OPENROUTER_REASONING_EFFORT, OPENROUTER_MAX_OUTPUT_TOKENS, openrouter_reasoning
 
 import torch
 from PIL import Image
@@ -137,6 +139,7 @@ class CLIPFoodAnalyzer(FoodAnalyzer):
         llm_model: str = OPENROUTER_MODEL_ID,
         device: Optional[str] = None,
         backend: str = "clip",
+        reasoning_effort: str = OPENROUTER_REASONING_EFFORT,
     ):
         if backend not in ("clip", "jina"):
             raise ValueError(f"backend must be 'clip' or 'jina', got {backend!r}")
@@ -146,12 +149,14 @@ class CLIPFoodAnalyzer(FoodAnalyzer):
         self.confidence_threshold = confidence_threshold
         self.api_key = openrouter_api_key or os.environ.get("OPENROUTER_API_KEY", "")
         self.llm_model = llm_model or OPENROUTER_MODEL_ID
+        self.reasoning_effort = reasoning_effort
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.nutrition_db = NutritionDB()
         self._clip_model = None
         self._clip_processor = None
         self._jina_model = None
         self._label_emb = None
+        self._refinement_client = None
 
     def _load_clip(self):
         """Lazy-load CLIP model."""
@@ -223,10 +228,18 @@ class CLIPFoodAnalyzer(FoodAnalyzer):
 
         return results
 
+    def _get_refinement_client(self):
+        if self._refinement_client is None:
+            from openai import OpenAI
+            self._refinement_client = OpenAI(
+                base_url="https://openrouter.ai/api/v1", api_key=self.api_key,
+            )
+        return self._refinement_client
+
     def _llm_refine_portions(
         self, clip_results: List[Tuple[str, float]], image_path: str
     ) -> List[dict]:
-        """Use LLM to refine CLIP detections and estimate portions."""
+        """Send the image and CLIP candidates to a VLM for food and portion refinement."""
         if not self.api_key:
             # Fallback: use default portions without LLM
             return self._default_portions(clip_results)
@@ -254,12 +267,7 @@ Return ONLY a JSON array:
 ]"""
 
         try:
-            from openai import OpenAI
-
-            client = OpenAI(
-                base_url="https://openrouter.ai/api/v1",
-                api_key=self.api_key,
-            )
+            client = self._get_refinement_client()
 
             b64 = encode_image_to_base64(image_path)
             media_type = get_image_media_type(image_path)
@@ -273,7 +281,8 @@ Return ONLY a JSON array:
                         {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}},
                     ],
                 }],
-                max_tokens=1500,
+                max_tokens=OPENROUTER_MAX_OUTPUT_TOKENS,
+                extra_body=openrouter_reasoning(self.reasoning_effort),
                 temperature=0.1,
             )
 
@@ -302,7 +311,7 @@ Return ONLY a JSON array:
             {
                 "name": name,
                 "quantity_grams": 150,
-                "portion_description": "1 estimated serving",
+                "portion_description": "150g default fallback (VLM refinement unavailable)",
                 "confidence": score,
             }
             for name, score in clip_results

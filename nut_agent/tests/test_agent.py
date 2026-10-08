@@ -54,11 +54,13 @@ class TestBuildGraph:
     @patch("nutricoach.agent.ChatOpenAI")
     def test_custom_openrouter_model(self, mock_llm_cls, mock_cp):
         from nutricoach.agent import build_nutricoach_graph
-        build_nutricoach_graph("fake-api-key", "testuser", model_id="anthropic/claude-sonnet-4.5")
+        build_nutricoach_graph("fake-api-key", "testuser", model_id="anthropic/claude-sonnet-4.5", reasoning_effort="low")
         mock_llm_cls.assert_called_once_with(
             model="anthropic/claude-sonnet-4.5",
             api_key="fake-api-key",
             base_url="https://openrouter.ai/api/v1",
+            extra_body={"reasoning": {"effort": "low"}},
+            max_tokens=8192,
         )
 
     @patch("nutricoach.agent._get_checkpointer", return_value=None)
@@ -73,7 +75,8 @@ class TestBuildGraph:
         from nutricoach.agent import build_nutricoach_graph
         graph = build_nutricoach_graph("fake-api-key", "testuser")
         assert graph is not None
-        mock_llm_cls.assert_called_once_with(model="stealth/space-bunny-alpha", api_key="fake-api-key", base_url="https://openrouter.ai/api/v1")
+        mock_llm_cls.assert_called_once_with(model="dots-studio/dots-3-note-preview:free", api_key="fake-api-key", base_url="https://openrouter.ai/api/v1",
+                                             extra_body={"reasoning": {"effort": "high"}}, max_tokens=8192)
 
     @patch("nutricoach.agent._get_checkpointer", return_value=None)
     @patch("nutricoach.agent.ChatOpenAI")
@@ -102,7 +105,8 @@ class TestBuildGraph:
         from nutricoach.agent import build_nutricoach_graph
         build_nutricoach_graph("fake-api-key", "testuser")
 
-        mock_llm_cls.assert_called_once_with(model="stealth/space-bunny-alpha", api_key="fake-api-key", base_url="https://openrouter.ai/api/v1")
+        mock_llm_cls.assert_called_once_with(model="dots-studio/dots-3-note-preview:free", api_key="fake-api-key", base_url="https://openrouter.ai/api/v1",
+                                             extra_body={"reasoning": {"effort": "high"}}, max_tokens=8192)
         mock_llm.bind_tools.assert_called_once()
         tools_arg = mock_llm.bind_tools.call_args[0][0]
         assert len(tools_arg) >= 5  # 5 tools including analyze_food_image
@@ -179,15 +183,15 @@ def test_tool_node_isolates_users(tmp_path, monkeypatch):
 
 def test_photo_estimate_is_logged_only_on_request(tmp_path, monkeypatch):
     monkeypatch.setattr("nutricoach.tools.SECRETS_DIR", tmp_path)
-    result = FoodAnalysisResult(method="rag_vlm", food_items=[FoodItem("rice", 100, calories=130)])
+    result = FoodAnalysisResult(method="vlm_single", food_items=[FoodItem("rice", 100, calories=130)])
     result.compute_totals()
-    with patch("nutricoach.food_vision.rag_vlm_analyzer.RAGVLMAnalyzer") as analyzer:
+    with patch("nutricoach.food_vision.vlm_analyzer.VLMAnalyzerSingleShot") as analyzer:
         analyzer.return_value.analyze.return_value = result
         image = tmp_path / "meal.jpg"
         image.write_bytes(b"image")
         config = {"configurable": {"username": "alice", "openrouter_api_key": "vision-key", "vision_model_id": "test/vision"}}
         analyze_food_image.invoke({"image_path": str(image)}, config=config)
-        analyzer.assert_called_with(api_key="vision-key", model="test/vision")
+        analyzer.assert_called_with(api_key="vision-key", model="test/vision", reasoning_effort="high")
         from shared.memory import MemoryManager
         memory = MemoryManager("alice", tmp_path)
         assert memory.load_todays_log() is None
@@ -200,3 +204,5 @@ def test_vision_methods_default_to_shared_openrouter_model():
     assert VLMAnalyzerSingleShot().model == OPENROUTER_MODEL_ID
     assert RAGVLMAnalyzer().model == OPENROUTER_MODEL_ID
     assert CLIPFoodAnalyzer().llm_model == OPENROUTER_MODEL_ID
+    for analyzer in (VLMAnalyzer(), RAGVLMAnalyzer(), CLIPFoodAnalyzer()):
+        assert analyzer.reasoning_effort == "high"

@@ -13,28 +13,24 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
-from shared.config import OPENROUTER_MODEL_ID
-
-st.set_page_config(
-    page_title="Smart Recipe Lab",
-    page_icon="🧪",
-    layout="wide",
-)
-
+from shared.config import OPENROUTER_MODEL_ID, OPENROUTER_REASONING_EFFORT, OPENROUTER_REASONING_EFFORTS
 
 def get_predictor():
     """Initialize or retrieve the FoodModelPredictor."""
     api_key = st.session_state.get("api_key") or os.environ.get("OPENROUTER_API_KEY", "")
     model_id = st.session_state.get("model_id") or OPENROUTER_MODEL_ID
+    reasoning_effort = st.session_state.get("reasoning_effort", OPENROUTER_REASONING_EFFORT)
     predictor = st.session_state.get("food_predictor")
     if predictor is None or predictor.api_key != api_key or predictor.model_id != model_id:
         from recipe_lab.predictor import FoodModelPredictor
         with st.spinner("Preparing local embeddings and LightGBM models (first run may take several minutes)..."):
             try:
-                st.session_state["food_predictor"] = FoodModelPredictor(api_key=api_key, model_id=model_id)
+                st.session_state["food_predictor"] = FoodModelPredictor(api_key=api_key, model_id=model_id,
+                                                                      reasoning_effort=reasoning_effort)
             except Exception as exc:
                 st.error(f"Could not prepare recipe models: {exc}")
                 return None
+    st.session_state["food_predictor"].reasoning_effort = reasoning_effort
     return st.session_state["food_predictor"]
 
 
@@ -115,31 +111,37 @@ def display_analysis_results(analysis: dict):
     nutrients = analysis.get("nutrients", {})
     per_serving = nutrients.get("per_serving")
     if per_serving:
-        st.markdown("### Estimated Nutrition (per serving)")
+        st.markdown("### LLM Nutrition Estimate (per serving)")
         cols = st.columns(4)
         units = {"kcal": "kcal"}
         for i, (target, value) in enumerate(per_serving.items()):
             unit = units.get(target, "g")
             cols[i % 4].metric(target.capitalize(), f"{value:g} {unit}")
-        st.caption(
-            "Ballpark estimate from the recipe text (typical calorie error "
-            "30-50% per serving). Good for comparing recipes, not for "
-            "precise tracking."
-        )
+        st.caption("Zero-shot OpenRouter estimate. Use as a rough guide, not for precise tracking.")
+    elif nutrients.get("error"):
+        st.info(f"Nutrition estimate unavailable: {nutrients['error']}")
 
 
-def main():
-    st.title("Smart Recipe Lab")
-    st.markdown("Analyze recipes with local embeddings and LightGBM. OpenRouter adds optional explanations.")
+def main(embedded: bool = False):
+    if embedded:
+        st.subheader("Smart Recipe Lab")
+    else:
+        st.title("Smart Recipe Lab")
+    st.markdown("Analyze recipes with local classifiers and zero-shot OpenRouter nutrition estimates.")
 
-    # Sidebar: API key
-    with st.sidebar:
-        st.header("Settings")
-        api_key = st.text_input("OpenRouter API Key", type="password", value=os.environ.get("OPENROUTER_API_KEY", ""))
-        model_id = st.text_input("OpenRouter model ID", value=os.environ.get("OPENROUTER_MODEL_ID", OPENROUTER_MODEL_ID))
-        st.caption("Default model: [stealth/space-bunny-alpha](https://openrouter.ai/stealth/space-bunny-alpha)")
-        st.session_state["api_key"] = api_key or None
-        st.session_state["model_id"] = model_id.strip() or OPENROUTER_MODEL_ID
+    if not embedded:
+        with st.sidebar:
+            st.header("Settings")
+            st.selectbox("Reasoning effort", OPENROUTER_REASONING_EFFORTS,
+                         index=OPENROUTER_REASONING_EFFORTS.index(OPENROUTER_REASONING_EFFORT), key="reasoning_effort",
+                         help="Choose a level supported by your OpenRouter model.")
+            api_key = st.text_input("OpenRouter API Key", type="password", value=os.environ.get("OPENROUTER_API_KEY", ""))
+            model_id = st.text_input("OpenRouter model ID", value=os.environ.get("OPENROUTER_MODEL_ID", OPENROUTER_MODEL_ID))
+            st.caption("Default model: [dots-studio/dots-3-note-preview:free](https://openrouter.ai/dots-studio/dots-3-note-preview:free)")
+            st.session_state["api_key"] = api_key or None
+            st.session_state["model_id"] = model_id.strip() or OPENROUTER_MODEL_ID
+    else:
+        st.session_state["model_id"] = st.session_state.get("model_id") or os.environ.get("OPENROUTER_MODEL_ID", OPENROUTER_MODEL_ID)
 
     # Main tabs
     tab_single, tab_compare = st.tabs(["Analyze Recipe", "Compare Recipes"])
@@ -204,8 +206,9 @@ def main():
 
     # Footer
     st.markdown("---")
-    st.caption("Smart Recipe Lab - Powered by local Hugging Face embeddings, LightGBM, and optional OpenRouter")
+    st.caption("Smart Recipe Lab - Powered by local Hugging Face embeddings, LightGBM, and OpenRouter")
 
 
 if __name__ == "__main__":
+    st.set_page_config(page_title="Smart Recipe Lab", page_icon="🧪", layout="wide")
     main()

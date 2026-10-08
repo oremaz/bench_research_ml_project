@@ -1,19 +1,21 @@
 """
 Benchmark embedding backends and prediction methods for the Recipe Lab tasks.
 
-Compares BAAI/bge-base-en-v1.5 against jinaai/jina-embeddings-v5-omni-small
-across classifiers (logistic probe, kNN, LightGBM, XGBoost, MLP, fine-tuned
-bge-base) on difficulty, meal type (binary and 3-class) and total-time class,
-plus multi-target nutrient regression (per-serving kcal/fat/carbs/... from the
-recipes' ground-truth nutrients column).
+Compares BAAI/bge-base-en-v1.5, jinaai/jina-embeddings-v5-omni-small, and
+LiquidAI/LFM2.5-Embedding-350M across classifiers (logistic probe, kNN,
+LightGBM, XGBoost, CatBoost, stacking, MLP, and fine-tuned bge-base) on
+difficulty, meal type (binary and 3-class), and total-time class.
 
 Writes results to ml_pipeline/results/bench_recipe_methods.json and prints
 markdown tables. Deployment training stays in train_recipe_models.py.
 
 Run:
     CUDA_VISIBLE_DEVICES=1 PYTHONPATH=. uv run python ml_pipeline/bench_recipe_methods.py
+    CUDA_VISIBLE_DEVICES=1 PYTHONPATH=. uv run python ml_pipeline/bench_recipe_methods.py \
+        --embedding-models BAAI/bge-large-en-v1.5 LiquidAI/LFM2.5-Embedding-350M
 """
 
+import argparse
 import ast
 import json
 import os
@@ -30,10 +32,10 @@ sys.path.insert(0, str(ML_PIPELINE_DIR))
 sys.path.insert(0, str(ML_PIPELINE_DIR.parent / "nut_agent"))
 
 import torch
-from sklearn.linear_model import LogisticRegression, RidgeCV
-from sklearn.metrics import accuracy_score, f1_score, mean_absolute_error, r2_score
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, cross_val_score
-from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 
 from utils.data import load_csv, filter_meal_types
@@ -45,14 +47,34 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-BACKENDS = {
-    "bge": "BAAI/bge-base-en-v1.5",
-    "jina": "jinaai/jina-embeddings-v5-omni-small",
+DEFAULT_EMBEDDING_MODELS = [
+    "BAAI/bge-base-en-v1.5",
+    "jinaai/jina-embeddings-v5-omni-small",
+    "LiquidAI/LFM2.5-Embedding-350M",
+]
+DEFAULT_MODEL_KEYS = {
+    "BAAI/bge-base-en-v1.5": "bge",
+    "jinaai/jina-embeddings-v5-omni-small": "jina",
+    "LiquidAI/LFM2.5-Embedding-350M": "lfm2_5",
 }
 
-NUTRIENT_TARGETS = ["kcal", "fat", "saturates", "carbs", "sugars", "fibre", "protein", "salt"]
-
 RESULTS_PATH = ML_PIPELINE_DIR / "results" / "bench_recipe_methods.json"
+
+
+def model_key(model_name):
+    return DEFAULT_MODEL_KEYS.get(
+        model_name,
+        model_name.lower().replace("/", "__").replace("-", "_").replace(".", "_"),
+    )
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--embedding-models", nargs="+", default=DEFAULT_EMBEDDING_MODELS,
+        help="Hugging Face sentence-transformer model IDs to benchmark.",
+    )
+    return parser.parse_args(argv)
 
 
 def save_results(results):
@@ -103,26 +125,6 @@ def time_bin(t):
     elif t < 60:
         return 2
     return 3
-
-
-def parse_nutrients(x):
-    """Return {target: float} for a nutrients cell, or None if unusable."""
-    try:
-        d = ast.literal_eval(x) if isinstance(x, str) else x
-    except Exception:
-        return None
-    if not isinstance(d, dict) or not d:
-        return None
-    out = {}
-    for key in NUTRIENT_TARGETS:
-        v = d.get(key)
-        if v is None:
-            return None
-        m = re.search(r"(-?\d+\.?\d*)", str(v))
-        if not m:
-            return None
-        out[key] = float(m.group(1))
-    return out
 
 
 def build_datasets():
@@ -176,19 +178,6 @@ def build_datasets():
         "test_split": "test_bis", "test_idx": np.where(te_mask)[0],
         "y_test": tt_test[te_mask].apply(time_bin).values.astype(int),
         "labels": ["<15 min", "15-30 min", "30-60 min", ">60 min"],
-    }
-
-    # nutrients regression (per serving), test on test_bis
-    nut_tr = train_df["nutrients"].apply(parse_nutrients)
-    nut_te = test_df["nutrients"].apply(parse_nutrients)
-    tr_mask = nut_tr.notna().values
-    te_mask = nut_te.notna().values
-    tasks["nutrients"] = {
-        "train_idx": np.where(tr_mask)[0],
-        "y_train": np.array([[n[t] for t in NUTRIENT_TARGETS] for n in nut_tr[tr_mask]]),
-        "test_split": "test_bis", "test_idx": np.where(te_mask)[0],
-        "y_test": np.array([[n[t] for t in NUTRIENT_TARGETS] for n in nut_te[te_mask]]),
-        "labels": NUTRIENT_TARGETS,
     }
 
     dfs = {"train": train_df, "test_bis": test_df, "test": meal_test_df}
@@ -323,121 +312,25 @@ def finetune_bge(train_texts, y_train, test_texts, y_test, num_labels,
     }, preds
 
 
-def finetune_bge_regressor(train_texts, y_train, test_texts, y_test,
-                           epochs=5, lr=2e-5, batch_size=16, max_len=512):
-    """Fine-tune bge-base with a multi-target regression head on standardized targets."""
-    from torch.utils.data import DataLoader, TensorDataset
-    from transformers import AutoModelForSequenceClassification, AutoTokenizer
-
-    torch.manual_seed(SEED)
-    tok = AutoTokenizer.from_pretrained("BAAI/bge-base-en-v1.5")
-    model = AutoModelForSequenceClassification.from_pretrained(
-        "BAAI/bge-base-en-v1.5", num_labels=y_train.shape[1],
-        problem_type="regression",
-    ).to(DEVICE)
-
-    mu = y_train.mean(axis=0)
-    sd = y_train.std(axis=0) + 1e-8
-    y_std = (y_train - mu) / sd
-
-    enc = tok(list(train_texts), truncation=True, max_length=max_len,
-              padding=True, return_tensors="pt")
-    ds = TensorDataset(enc["input_ids"], enc["attention_mask"],
-                       torch.tensor(y_std, dtype=torch.float32))
-    gen = torch.Generator().manual_seed(SEED)
-    loader = DataLoader(ds, batch_size=batch_size, shuffle=True, generator=gen)
-
-    loss_fn = torch.nn.SmoothL1Loss()
-    opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
-
-    t0 = time.time()
-    model.train()
-    for _ in range(epochs):
-        for ids, mask, yb in loader:
-            opt.zero_grad()
-            logits = model(input_ids=ids.to(DEVICE), attention_mask=mask.to(DEVICE)).logits
-            loss = loss_fn(logits, yb.to(DEVICE))
-            loss.backward()
-            opt.step()
-    fit_s = time.time() - t0
-
-    model.eval()
-    preds = []
-    with torch.no_grad():
-        for i in range(0, len(test_texts), 64):
-            enc = tok(list(test_texts[i:i + 64]), truncation=True, max_length=max_len,
-                      padding=True, return_tensors="pt").to(DEVICE)
-            preds.append(model(**enc).logits.cpu().numpy())
-    preds = np.concatenate(preds) * sd + mu
-
-    del model
-    torch.cuda.empty_cache()
-
-    out = {"fit_seconds": round(fit_s, 1), "per_target": {}}
-    for j, t in enumerate(NUTRIENT_TARGETS):
-        out["per_target"][t] = {
-            "mae": round(float(mean_absolute_error(y_test[:, j], preds[:, j])), 3),
-            "r2": round(float(r2_score(y_test[:, j], preds[:, j])), 3),
-        }
-    out["mean_r2"] = round(float(np.mean([v["r2"] for v in out["per_target"].values()])), 3)
-    out["kcal_mae"] = out["per_target"]["kcal"]["mae"]
-    return out
-
-
-# --- nutrient regression ---
-
-def make_regressors(seed=SEED):
-    import lightgbm as lgb
-    from catboost import CatBoostRegressor
-    from sklearn.multioutput import MultiOutputRegressor
-
-    from pipelines_torch.models import StackingEnsembleRegressorWrapper
-
-    return {
-        "ridge": RidgeCV(alphas=[0.1, 1.0, 10.0, 100.0]),
-        "knn": KNeighborsRegressor(n_neighbors=10, weights="distance", metric="cosine"),
-        "lightgbm": MultiOutputRegressor(
-            lgb.LGBMRegressor(n_estimators=400, random_state=seed, verbosity=-1)
-        ),
-        "catboost": MultiOutputRegressor(CatBoostRegressor(
-            iterations=500, learning_rate=0.05, depth=6,
-            random_seed=seed, verbose=False, allow_writing_files=False,
-        )),
-        "stacking": StackingEnsembleRegressorWrapper(random_state=seed).model,
-    }
-
-
-def eval_regressor(reg, X_tr, y_tr, X_te, y_te):
-    t0 = time.time()
-    reg.fit(X_tr, y_tr)
-    fit_s = time.time() - t0
-    preds = np.asarray(reg.predict(X_te))
-    out = {"fit_seconds": round(fit_s, 1), "per_target": {}}
-    for j, t in enumerate(NUTRIENT_TARGETS):
-        out["per_target"][t] = {
-            "mae": round(float(mean_absolute_error(y_te[:, j], preds[:, j])), 3),
-            "r2": round(float(r2_score(y_te[:, j], preds[:, j])), 3),
-        }
-    out["mean_r2"] = round(float(np.mean([v["r2"] for v in out["per_target"].values()])), 3)
-    out["kcal_mae"] = out["per_target"]["kcal"]["mae"]
-    return out
-
-
-def main():
+def main(argv=None):
+    args = parse_args(argv)
+    backends = {model_key(model_name): model_name for model_name in args.embedding_models}
+    if len(backends) != len(args.embedding_models):
+        raise ValueError("Embedding model IDs must be unique")
     print(f"Device: {DEVICE}")
     tasks, dfs = build_datasets()
     for name, t in tasks.items():
         print(f"[{name}] train n={len(t['y_train'])} test n={len(t['y_test'])} ({t['test_split']})")
 
     embeddings = {}
-    for backend, model_name in BACKENDS.items():
+    for backend, model_name in backends.items():
         for split, df in dfs.items():
             print(f"Embedding {backend}/{split}...")
             embeddings[(backend, split)] = embed_split(backend, model_name, df, split)
         torch.cuda.empty_cache()
 
     # Merge with an existing results file so reruns only compute missing combos
-    results = {"classification": {}, "nutrients": {}, "finetune": {}}
+    results = {"classification": {}, "finetune": {}}
     if RESULTS_PATH.exists():
         with open(RESULTS_PATH) as f:
             prev = json.load(f)
@@ -448,7 +341,7 @@ def main():
     for task in cls_tasks:
         t = tasks[task]
         results["classification"].setdefault(task, {})
-        for backend in BACKENDS:
+        for backend in backends:
             X_tr = embeddings[(backend, "train")][t["train_idx"]]
             X_te = embeddings[(backend, t["test_split"])][t["test_idx"]]
             done = results["classification"][task].setdefault(backend, {})
@@ -485,47 +378,9 @@ def main():
         save_results(results)
         print(f"[{task}][bge_finetune] {metrics}")
 
-    if "nutrients" not in results["finetune"]:
-        t = tasks["nutrients"]
-        tr_texts = dfs["train"]["recipe_text"].fillna("").values[t["train_idx"]]
-        te_texts = dfs[t["test_split"]]["recipe_text"].fillna("").values[t["test_idx"]]
-        metrics = finetune_bge_regressor(tr_texts, t["y_train"], te_texts, t["y_test"])
-        results["finetune"]["nutrients"] = metrics
-        save_results(results)
-        print(f"[nutrients][bge_finetune] kcal_mae={metrics['kcal_mae']} mean_r2={metrics['mean_r2']}")
-
-    t = tasks["nutrients"]
-    y_tr, y_te = t["y_train"], t["y_test"]
-    mean_pred = np.tile(y_tr.mean(axis=0), (len(y_te), 1))
-    baseline = {"per_target": {}}
-    for j, tgt in enumerate(NUTRIENT_TARGETS):
-        baseline["per_target"][tgt] = {
-            "mae": round(float(mean_absolute_error(y_te[:, j], mean_pred[:, j])), 3),
-            "r2": round(float(r2_score(y_te[:, j], mean_pred[:, j])), 3),
-        }
-    baseline["kcal_mae"] = baseline["per_target"]["kcal"]["mae"]
-    results["nutrients"]["baseline_mean"] = baseline
-    for backend in BACKENDS:
-        X_tr = embeddings[(backend, "train")][t["train_idx"]]
-        X_te = embeddings[(backend, t["test_split"])][t["test_idx"]]
-        done = results["nutrients"].setdefault(backend, {})
-        for mname, reg in make_regressors().items():
-            if mname in done:
-                continue
-            try:
-                metrics = eval_regressor(reg, X_tr, y_tr, X_te, y_te)
-            except Exception as e:
-                print(f"[nutrients][{backend}][{mname}] FAILED: {e}")
-                continue
-            results["nutrients"][backend][mname] = metrics
-            save_results(results)
-            print(f"[nutrients][{backend}][{mname}] kcal_mae={metrics['kcal_mae']} "
-                  f"mean_r2={metrics['mean_r2']}")
-
     results["meta"] = {
         "seed": SEED,
-        "backends": BACKENDS,
-        "nutrient_targets": NUTRIENT_TARGETS,
+        "backends": backends,
         "train_sizes": {k: int(len(v["y_train"])) for k, v in tasks.items()},
         "test_sizes": {k: int(len(v["y_test"])) for k, v in tasks.items()},
     }

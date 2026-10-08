@@ -1,11 +1,8 @@
 """
-Food Vision module — multiple methods for food image analysis.
+Food Vision module: multiple methods for food image analysis.
 
-Methods:
-1. RF-DETR fine-tuning pipeline (detection + nutrition DB)
-2. Pure vLLM via OpenRouter (chained prompts)
-3. CLIP zero-shot + LLM ensemble
-4. RAG-enhanced VLM (DietAI24-inspired)
+Primary benchmark: single-shot VLM, RGB regression, specialized Food-R1,
+and RGB geometry with nutrition lookup. Legacy research analyzers are retained.
 """
 
 from .base import FoodAnalysisResult, FoodAnalyzer

@@ -14,8 +14,16 @@ import json
 import logging
 import uuid
 import tempfile
+import hashlib
 from pathlib import Path
-from datetime import datetime
+from datetime import date, datetime
+
+# On macOS, LightGBM must load before the agent's PyTorch dependencies.
+if sys.platform == "darwin":
+    try:
+        import lightgbm
+    except (ImportError, OSError):
+        pass
 
 # Ensure imports work
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -28,7 +36,7 @@ import pandas as pd
 
 from langchain_core.messages import HumanMessage, AIMessage
 
-from shared.config import OPENROUTER_MODEL_ID, SECRETS_DIR, STREAMLIT_CONFIG
+from shared.config import OPENROUTER_MODEL_ID, OPENROUTER_REASONING_EFFORT, OPENROUTER_REASONING_EFFORTS, SECRETS_DIR, STREAMLIT_CONFIG
 from shared.auth import (
     authenticate_user,
     register_user,
@@ -37,6 +45,9 @@ from shared.auth import (
 from shared.memory import MemoryManager
 from shared.schemas import DailyLog, MealEntry
 from nutricoach.agent import build_nutricoach_graph, create_initial_state
+from nutricoach.tools import analyze_food_image, save_photo_analysis
+from nutricoach.food_vision.nutrition_db import NutritionDB
+from nutricoach.food_vision.review import NUTRIENT_FIELDS, photo_edit_rows, apply_photo_edits
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +75,7 @@ def initialize_session_state():
         "thread_id": None,
         "chat_history": [],
         "vision_model_id": OPENROUTER_MODEL_ID,
+        "reasoning_effort": OPENROUTER_REASONING_EFFORT,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -83,6 +95,7 @@ def _thread_config() -> dict:
         "username": st.session_state.get("username"),
         "openrouter_api_key": st.session_state.get("api_key"),
         "vision_model_id": st.session_state.get("vision_model_id", OPENROUTER_MODEL_ID),
+        "reasoning_effort": st.session_state.get("reasoning_effort", OPENROUTER_REASONING_EFFORT),
     }}
 
 
@@ -149,16 +162,21 @@ def _ensure_memory_migrated(username):
 
 
 def init_agent():
-    if st.session_state["agent_graph"] is not None:
+    reasoning_effort = st.session_state.get("reasoning_effort", OPENROUTER_REASONING_EFFORT)
+    if (st.session_state["agent_graph"] is not None
+            and st.session_state.get("agent_reasoning_effort") == reasoning_effort):
         return True
-    api_key = st.text_input("OpenRouter API Key", type="password", value=os.environ.get("OPENROUTER_API_KEY", ""))
-    model_id = st.text_input("OpenRouter model ID", value=os.environ.get("OPENROUTER_MODEL_ID", OPENROUTER_MODEL_ID))
-    st.caption("Default model: [stealth/space-bunny-alpha](https://openrouter.ai/stealth/space-bunny-alpha)")
+    api_key = st.text_input("OpenRouter API Key", type="password", value=st.session_state.get("api_key") or os.environ.get("OPENROUTER_API_KEY", ""))
+    model_id = st.text_input("OpenRouter model ID", value=st.session_state.get("model_id") or os.environ.get("OPENROUTER_MODEL_ID", OPENROUTER_MODEL_ID))
+    st.caption("Default model: [dots-studio/dots-3-note-preview:free](https://openrouter.ai/dots-studio/dots-3-note-preview:free)")
     if api_key:
         st.session_state["api_key"] = api_key
+        st.session_state["model_id"] = model_id.strip() or OPENROUTER_MODEL_ID
         username = st.session_state.get("username", "anonymous")
         try:
-            st.session_state["agent_graph"] = build_nutricoach_graph(api_key, username, model_id=model_id.strip() or OPENROUTER_MODEL_ID)
+            st.session_state["agent_graph"] = build_nutricoach_graph(api_key, username, model_id=model_id.strip() or OPENROUTER_MODEL_ID,
+                                                                       reasoning_effort=reasoning_effort)
+            st.session_state["agent_reasoning_effort"] = reasoning_effort
             st.success("Agent initialized!")
             return True
         except Exception as e:
@@ -261,63 +279,78 @@ def display_food_analysis():
     """Tab for analyzing food photos."""
     st.subheader("Analyze Food Photo")
     st.markdown("Upload a photo of your meal to estimate ingredients, portions, and calories.")
+    st.caption("Food photos are analyzed with Single-shot VLM.")
     st.text_input("Vision model ID", key="vision_model_id", help="Choose an OpenRouter model that accepts images.")
 
     uploaded = st.file_uploader("Upload a food image", type=["jpg", "jpeg", "png", "webp"])
-
-    if uploaded:
-        col_img, col_result = st.columns([1, 1])
-        with col_img:
-            st.image(uploaded, caption="Your meal", use_container_width=True)
-
-        with col_result:
-            if st.button("Analyze with NutriCoach Agent"):
-                if st.session_state["agent_graph"]:
-                    tmp_path = _save_upload(uploaded)
-                    try:
-                        msg = f"Please analyze this food image and estimate the calories and macros: {tmp_path}"
-                        send_message(msg)
-                    finally:
-                        tmp_path.unlink(missing_ok=True)
-
-    # Standalone comparison mode
-    st.markdown("---")
-    st.subheader("Compare Methods (standalone)")
-    st.markdown("Compare different analysis methods on the same image.")
-
-    uploaded2 = st.file_uploader("Upload image for comparison", type=["jpg", "jpeg", "png", "webp"], key="compare_upload")
-
-    method_options = ["vlm_chain", "vlm_single", "clip_ensemble", "rag_vlm", "rf_detr"]
-    selected_methods = st.multiselect("Select methods to compare", method_options, default=["vlm_chain", "rag_vlm"])
-
-    if uploaded2 and selected_methods and st.button("Run Comparison"):
-        tmp_path = _save_upload(uploaded2)
+    context = (st.session_state.get("username"), hashlib.sha256(uploaded.getvalue()).hexdigest()) if uploaded else None
+    if st.session_state.get("photo_context") != context:
+        st.session_state["photo_context"] = context
+        st.session_state.pop("photo_result", None)
+        st.session_state["photo_logged"] = False
+    if not uploaded:
+        return
+    st.image(uploaded, caption="Your meal", use_container_width=True)
+    if st.button("Analyze photo"):
+        st.session_state.pop("photo_result", None)
+        tmp_path = _save_upload(uploaded)
         try:
-            with st.spinner("Running comparison..."):
-                from nutricoach.food_vision.compare import run_comparison, format_comparison
-                results = run_comparison(
-                    str(tmp_path), methods=selected_methods,
-                    openrouter_api_key=st.session_state.get("api_key"),
-                    model_id=st.session_state["vision_model_id"].strip() or OPENROUTER_MODEL_ID,
-                )
-                st.code(format_comparison(results), language="text")
-
-                # Show per-method details
-                for method, result in results.items():
-                    with st.expander(f"{method} — {result.total_calories:.0f} kcal"):
-                        if result.error:
-                            st.error(result.error)
-                        else:
-                            for item in result.food_items:
-                                st.write(
-                                    f"- **{item.name}**: {item.quantity_grams:.0f}g "
-                                    f"({item.calories:.0f} kcal, P:{item.protein_g:.1f}g, "
-                                    f"C:{item.carbs_g:.1f}g, F:{item.fat_g:.1f}g)"
-                                )
-        except Exception as e:
-            st.error(f"Comparison failed: {e}")
+            with st.spinner("Analyzing your meal..."):
+                result = analyze_food_image.invoke({"image_path": str(tmp_path)}, config=_thread_config())
+            if result.get("error"):
+                st.error(result["error"])
+            else:
+                st.session_state["photo_result"] = result
+                st.session_state["photo_review_id"] = uuid.uuid4().hex[:8]
+                st.session_state["photo_logged"] = False
         finally:
             tmp_path.unlink(missing_ok=True)
+    if st.session_state.get("photo_result"):
+        display_photo_review()
+
+
+def display_photo_review():
+    original = st.session_state["photo_result"]
+    review_id = st.session_state["photo_review_id"]
+    logged = st.session_state.get("photo_logged", False)
+    st.markdown("**Review your meal**")
+    meal_name = st.text_input("Meal name", value="Photo meal", key=f"photo_name_{review_id}", disabled=logged)
+    st.caption("Edit grams, add rows, or select rows to delete ingredients. When changing a food, choose its nutrition source. "
+               "Manual nutrient columns are per 100g; selecting a database food overrides those columns.")
+    try:
+        rows = st.session_state["photo_saved_rows"] if logged else photo_edit_rows(original)
+    except (ValueError, TypeError, KeyError) as exc:
+        st.error(str(exc))
+        return
+    sources = ["Photo estimate", "Manual", *[f"Database: {name}" for name in sorted(NutritionDB().db)]]
+    columns = {
+        "original_index": None,
+        "name": st.column_config.TextColumn("Ingredient", required=True),
+        "quantity_grams": st.column_config.NumberColumn("Grams", min_value=0.01, required=True),
+        "nutrition_source": st.column_config.SelectboxColumn("Nutrition source", options=sources, required=True),
+        **{field: st.column_config.NumberColumn(f"{field.replace('_g', '')} / 100g", min_value=0.0)
+           for field in NUTRIENT_FIELDS},
+    }
+    edited = st.data_editor(pd.DataFrame(rows), num_rows="dynamic", hide_index=True,
+                            column_config=columns, disabled=True if logged else ["original_index"],
+                            key=f"photo_editor_{review_id}", use_container_width=True)
+    try:
+        corrected = apply_photo_edits(original, edited.to_dict("records"))
+    except (ValueError, TypeError, KeyError) as exc:
+        st.info(f"Complete your corrections: {exc}")
+        return
+    st.write(f"**{corrected.total_calories:.0f} kcal** · Protein: {corrected.total_protein_g:.1f}g · "
+             f"Carbs: {corrected.total_carbs_g:.1f}g · Fat: {corrected.total_fat_g:.1f}g")
+    if logged:
+        st.success("This meal has been saved to today's journal.")
+    elif st.button("Save reviewed meal to today's journal", key=f"photo_save_{review_id}"):
+        try:
+            save_photo_analysis(corrected, _thread_config(), meal_name=meal_name)
+            st.session_state["photo_saved_rows"] = edited.to_dict("records")
+            st.session_state["photo_logged"] = True
+            st.rerun()
+        except (ValueError, OSError) as exc:
+            st.error(f"Could not save meal: {exc}")
 
 
 # --- Quick Actions ---
@@ -357,11 +390,17 @@ def display_quick_actions():
 
 def display_daily_results():
     with st.expander("Daily Results Tracking", expanded=False):
-        col1, col2 = st.columns(2)
-        with col1:
-            current_weight = st.number_input("Current weight (kg):", min_value=30.0, max_value=200.0, value=70.0, step=0.1)
-        with col2:
-            date_tracked = st.date_input("Date:")
+        date_tracked = st.date_input("Meals date:", max_value=date.today())
+        record_weight = st.checkbox("I measured my weight")
+        current_weight = None
+        weight_date = None
+        if record_weight:
+            st.caption("Use the morning measurement, before breakfast. Date it on the morning it was measured, even when reviewing yesterday's meals.")
+            col1, col2 = st.columns(2)
+            with col1:
+                current_weight = st.number_input("Measured weight (kg):", min_value=30.0, max_value=200.0, value=None, step=0.1)
+            with col2:
+                weight_date = st.date_input("Weight measurement date:", max_value=date.today())
 
         st.subheader("Meal Compliance")
         meals = ["Breakfast", "Lunch", "Dinner", "Snacks"]
@@ -382,6 +421,15 @@ def display_daily_results():
 
         if st.button("Submit Daily Results"):
             if st.session_state["agent_graph"]:
+                if record_weight and current_weight is None:
+                    st.error("Enter the measured weight or uncheck 'I measured my weight'.")
+                    return
+                if record_weight:
+                    memory = MemoryManager(st.session_state["username"], SECRETS_DIR)
+                    weight_day = weight_date.isoformat()
+                    log = memory.load_daily_log(weight_day) or DailyLog(date=weight_day)
+                    log.weight_kg = current_weight
+                    memory.save_daily_log(log)
                 meal_lines = []
                 for meal, data in meal_data.items():
                     if data["followed_exactly"]:
@@ -392,7 +440,7 @@ def display_daily_results():
                 message = f"""Please analyze my daily results:
 
 **Daily Tracking Results for {date_tracked}**
-**Weight:** {current_weight} kg
+**Morning weight:** {f'{current_weight} kg on {weight_date}' if record_weight else 'Not measured'}
 **Meal Compliance:**
 {chr(10).join(meal_lines)}
 **Additional Information:** {additional_info or "None provided"}
@@ -598,6 +646,8 @@ def main_app():
     # Sidebar
     with st.sidebar:
         st.title("Control Panel")
+        st.selectbox("Reasoning effort", OPENROUTER_REASONING_EFFORTS, key="reasoning_effort",
+                     help="Applies to chat, recipes, and Food Vision. Choose a level supported by your model.")
         if not init_agent():
             st.stop()
         st.markdown("---")
@@ -613,8 +663,8 @@ def main_app():
             st.rerun()
 
     # Main content tabs
-    tab_chat, tab_food, tab_dashboard, tab_actions, tab_track = st.tabs([
-        "Chat", "Food Analysis", "Dashboard", "Quick Actions", "Daily Tracking",
+    tab_chat, tab_food, tab_recipe, tab_dashboard, tab_actions, tab_track = st.tabs([
+        "Chat", "Food Analysis", "Recipe Lab", "Dashboard", "Quick Actions", "Daily Tracking",
     ])
 
     with tab_chat:
@@ -622,6 +672,10 @@ def main_app():
 
     with tab_food:
         display_food_analysis()
+
+    with tab_recipe:
+        from recipe_lab.app import main as display_recipe_lab
+        display_recipe_lab(embedded=True)
 
     with tab_dashboard:
         display_nutrition_dashboard()

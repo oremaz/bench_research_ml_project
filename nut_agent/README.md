@@ -1,273 +1,114 @@
 # NutriCoach & Recipe Lab
 
-Two Streamlit apps sharing a common foundation: **NutriCoach** (stateful LLM nutritionist agent with food image analysis) and **Recipe Lab** (stateless ML recipe analyzer).
-
-## Project Structure
-
-```
-nut_agent/
-  SESSION_REPORT.md    Detailed report of the 2026-07 repair/training/feature session
-  shared/              Shared modules used by both apps
-    config.py            Constants (BMR, macros, activity multipliers, prompts)
-    utils.py             BMI calculation, nutrition target validation
-    auth.py              Argon2 password hashing, user registration/login
-    schemas.py           Pydantic models (UserProfile, DailyLog, NutritionTargets, etc.)
-    memory.py            MemoryManager: per-user structured storage with bounded context
-  nutricoach/          Stateful LLM-powered nutritionist agent
-    agent.py             LangGraph v2 agent with SqliteSaver checkpointer
-    tools.py             Agent tools (targets, intake, progress, profile, food image analysis)
-    intent.py            LLM-based intent classification via structured output
-    app.py               Streamlit UI (chat, food analysis, dashboard, daily tracking)
-    food_vision/         Multi-method food image analysis module
-      base.py              Abstract base class, FoodItem/FoodAnalysisResult data models
-      nutrition_db.py      Local nutrition DB (130+ foods, USDA/CIQUAL values, fuzzy matching)
-      rf_detr_analyzer.py  Method 1: RF-DETR object detection + fine-tuning pipeline
-      vlm_analyzer.py      Method 2: Pure vLLM (Claude Opus via OpenRouter, 3-step chain)
-      clip_analyzer.py     Method 3: CLIP zero-shot + LLM ensemble
-      rag_vlm_analyzer.py  Method 4: RAG-enhanced VLM (DietAI24-inspired)
-      compare.py           Comparison framework: benchmark all methods side-by-side
-      README.md            Detailed docs for food vision module
-  recipe_lab/          Stateless ML recipe analyzer
-    predictor.py         Embedding-based prediction (difficulty, meal type, time class)
-                         plus per-serving nutrient estimation (fine-tuned bge head)
-    app.py               Streamlit UI (analyze and compare recipes)
-  tests/               Unit and integration test suite (see Testing)
-  secrets/             Per-user data (excluded from version control)
-```
-
-## Quickstart
-
-```bash
-# From the repository root (uses the repo uv environment)
-
-# NutriCoach (requires OPENROUTER_API_KEY)
-PYTHONPATH=nut_agent uv run streamlit run nut_agent/nutricoach/app.py
-
-# Recipe Lab (local embeddings and LightGBM; OpenRouter optional)
-PYTHONPATH=nut_agent uv run streamlit run nut_agent/recipe_lab/app.py
-
-# Train the Recipe Lab models (LightGBM/XGBoost/MLP on local embeddings, GPU)
-CUDA_VISIBLE_DEVICES=1 PYTHONPATH=. uv run python ml_pipeline/train_recipe_models.py
-
-# Run tests
-PYTHONPATH=.:nut_agent uv run python -m pytest nut_agent/tests/ -q
-
-# Compare food analysis methods on an image
-cd nut_agent && python -m nutricoach.food_vision.compare --image plate.jpg
-```
+Two Streamlit applications exploring how LLM agents, local classifiers, and
+vision models can support nutrition tracking and recipe analysis. NutriCoach
+keeps a user profile and journal; Recipe Lab analyzes recipes without an account.
+Both are experimental applications, and their nutrition outputs are estimates.
 
 ## NutriCoach
 
-### Agent Architecture (v2)
+After registering and entering a profile, users can chat about their nutrition
+goals, ask for meal plans, and record meals and water intake. The app calculates
+calorie and macro targets from profile inputs, tracks intake against those
+targets, and displays logged nutrition and weight trends. Daily tracking allows
+meals and weight measurements to be recorded on separate dates.
 
-LangGraph agent powered by OpenRouter. The model ID is editable in the app and
-defaults to [`stealth/space-bunny-alpha`](https://openrouter.ai/stealth/space-bunny-alpha).
+The assistant uses an OpenRouter LLM in a LangGraph tool-calling loop. Tools
+handle calculations, food lookups, profile updates, logging, and saved meal plans.
+Structured profiles and journals are stored as per-user JSON files, while
+LangGraph's SQLite checkpointer persists conversation state. Each LLM call uses
+structured user context and a bounded recent conversation history.
 
-```
-START -> agent -> (tool_node -> agent)* -> END
-```
+Users can also upload a food photo to estimate foods, portions, calories, and
+macros. NutriCoach uses only **Single-shot VLM** (`vlm_single`): one OpenRouter
+image call supplies food names, estimated grams, and nutrients. Users can edit
+the dish name and quantities, add or remove ingredients, and review recalculated
+totals before explicitly saving the meal. New or renamed ingredients need a
+database match or manually entered per-100g values. The default model is
+`dots-studio/dots-3-note-preview:free`.
 
-**v2 changes** (based on [feedback analysis](../todo/)):
-- **Dropped intent classification node**: was an extra LLM call that never actually routed; now the agent handles intent naturally
-- **SqliteSaver checkpointer**: replaces ~80 lines of manual JSON serialization for conversation persistence
-- **Removed ghost state fields**: `user_profile`, `nutrition_targets`, `todays_log` were declared but never read; state now contains only `messages`
-- **Added food image analysis**: new `analyze_food_image` tool with 4 analysis methods
-
-### Tools
-
-| Tool | Description |
-|------|-------------|
-| `calculate_personalized_nutrition_targets` | BMR/TDEE/macros from profile |
-| `log_daily_intake` | Log meals with the agent's calorie/macro estimates; daily totals recomputed |
-| `get_progress_summary` | Weekly trends and statistics |
-| `update_user_profile` | Modify profile fields |
-| `analyze_food_image` | Analyze food photo → ingredients + portions + calories |
-| `log_water_intake` | Add water to today's log, reports remaining vs target |
-| `lookup_food_nutrition` | Per-portion calories/macros from the local USDA/CIQUAL DB (no API cost) |
-| `get_remaining_daily_budget` | "What can I still eat today?" — targets minus logged intake |
-| `save_meal_plan` / `get_meal_plan` | Persist the weekly meal plan; powers compliance checks and grocery lists |
-| `generate_weekly_summary` | Aggregate the last 7 daily logs into a stored weekly review |
-
-### Food Image Analysis
-
-Take a photo of your plate → get estimated ingredients, quantities, and calories.
-
-4 methods available (see [food_vision/README.md](nutricoach/food_vision/README.md)):
-
-1. **RF-DETR**: Object detection (needs fine-tuning, runs offline)
-2. **Pure vLLM**: Claude Opus 3-step prompt chain via OpenRouter
-3. **CLIP + LLM**: Zero-shot classification + LLM refinement (CLIP ViT-B/32
-   default; `backend="jina"` switches to jina-v5-omni-small — benchmarked on
-   Food101 in the food_vision README, CLIP wins 0.796 vs 0.743 top-1)
-4. **RAG VLM**: Database-grounded VLM estimation (recommended)
-
-The vision model ID is editable in the Food Analysis tab and applies to agent
-photo analysis and method comparisons. Choose an image-capable OpenRouter model.
-
-### Persistence
-
-Conversation history is now managed by LangGraph's `SqliteSaver`:
-- Each conversation gets a `thread_id`
-- State is automatically saved/restored via the checkpointer
-- No manual JSON serialization needed
-- DB stored at `secrets/{username}_checkpoints.db`
-
-### Using Programmatically
-
-```python
-from nutricoach.agent import build_nutricoach_graph, create_initial_state
-from langchain_core.messages import HumanMessage, AIMessage
-
-graph = build_nutricoach_graph("your_openrouter_api_key", "username")
-
-# Conversations are thread-based
-config = {"configurable": {"thread_id": "session-1", "username": "username"}, "recursion_limit": 20}
-result = graph.invoke(
-    {"messages": [HumanMessage(content="Calculate my nutrition targets")]},
-    config=config,
-)
-
-for msg in reversed(result["messages"]):
-    if isinstance(msg, AIMessage):
-        print(msg.content)
-        break
-```
+This choice follows the Nutrition5k pilot runs, which did not establish a clear
+accuracy gain from the extra pipeline steps. The comparison scripts, alternative
+methods, and recorded results remain available for research in
+[Food Vision](nutricoach/food_vision/README.md). Its revised benchmark compares
+single-shot VLM, RGB regression, specialized Food-R1 and a geometry/database
+hybrid on a reproducible 50-dish official-test subset, scoring calories, macros
+and total mass. The Dots baseline is complete; pending methods and the prepared
+Jean Zay job are documented separately from measured results.
 
 ## Recipe Lab
 
-Standalone recipe analyzer, with no login or conversation state:
+Enter a recipe description to analyze it, or compare two recipes side by side.
+Recipe Lab is available as a standalone app and as a tab inside NutriCoach.
+It does not maintain a nutrition journal or conversation history.
 
-- **Analyze** a recipe: ML predictions (difficulty, meal type, time class) + optional LLM interpretation
-- **Compare** two recipes side-by-side
-- The primary classifier uses local [`LiquidAI/LFM2.5-Embedding-350M`](https://huggingface.co/LiquidAI/LFM2.5-Embedding-350M)
-  embeddings and LightGBM. On first use, it embeds `ml_pipeline/recipes_df.csv`,
-  trains the models, and caches embeddings and checkpoints under
-  `nut_agent/secrets/recipe_lab_cache/`. Existing BGE checkpoints and the
-  fine-tuned nutrient head can still be used. The LFM2.5 cache is keyed by
-  model revision and dataset content.
-- OpenRouter is optional for recipe extraction and explanations.
-- Labels: difficulty `Easy` / `More effort` (2-class, `A challenge` merged at training),
-  meal type `Breakfast` / `Lunch/Dinner` (binary), time class `<15` / `15-30` / `30-60` / `>60 min`
-- Nutrient estimation: per-serving `kcal`, `fat`, `saturates`, `carbs`, `sugars`,
-  `fibre`, `protein`, `salt` via multi-target regression on the same embeddings
+Classification runs locally using frozen
+`LiquidAI/LFM2.5-Embedding-350M` text embeddings and LightGBM classifiers:
 
-### Method Benchmarks (2026-07)
+- Difficulty: `Easy` or `More effort`, with `A challenge` merged into the latter.
+- Meal type: breakfast or lunch/dinner.
+- Total preparation and cooking time: `<15`, `15-30`, `30-60`, or `>60 min`.
 
-Run `CUDA_VISIBLE_DEVICES=1 PYTHONPATH=. uv run python ml_pipeline/bench_recipe_methods.py`
-from the repo root; full per-task results land in
-`ml_pipeline/results/bench_recipe_methods.json`. All numbers below are on the
-held-out test splits (`recipes_df_test_bis.csv` for difficulty/time/nutrients,
-the out-of-domain `recipes_df_test.csv` for meal type) with the historical
-`BAAI/bge-base-en-v1.5` embedding backend. These results do not validate the
-current LFM2.5 classifier. **Bold** = the models deployed at that time.
+On first analysis, the app loads the embedding model, embeds
+`ml_pipeline/recipes_df.csv`, and trains the classifiers. This can take several
+minutes and requires the dataset and an initial model download. Embeddings and
+classifiers are cached under `nut_agent/secrets/recipe_lab_cache/`, keyed by
+dataset content and the pinned model revision. Compatible existing BGE or Jina
+checkpoints can serve as a fallback if the LFM2.5 path is unavailable.
 
-Classification, test accuracy / macro F1:
+With an OpenRouter key, the app also extracts recipe structure, estimates
+per-serving calories and seven nutrients in zero shot, and explains the results.
+The LLM may infer ingredients, quantities, or steps omitted from the description,
+so these assumptions affect both classification and nutrition estimates.
+Without a key, local classification remains available, with basic text parsing.
 
-| Method | Difficulty | Meal binary | Time class |
-|--------|-----------|-------------|------------|
-| logreg probe | 0.601 / 0.578 | 0.831 / 0.785 | 0.603 / 0.565 |
-| kNN (cosine) | 0.805 / 0.510 | 0.836 / 0.792 | 0.555 / 0.512 |
-| LightGBM | 0.801 / 0.647 | **0.806 / 0.739** | **0.656 / 0.616** |
-| XGBoost | 0.806 / 0.678 | 0.801 / 0.730 | 0.638 / 0.578 |
-| CatBoost (new) | 0.798 / 0.709 | 0.806 / 0.739 | 0.634 / 0.596 |
-| Stacking ensemble (new) | **0.813 / 0.717** | 0.806 / 0.739 | 0.635 / 0.593 |
-| MLP | 0.798 / 0.444 | 0.801 / 0.730 | 0.588 / 0.485 |
-| bge-base fine-tuned | 0.826 / 0.752 | 0.846 / 0.807 | 0.694 / 0.658 |
+Recipe benchmark code lives in
+[`ml_pipeline/bench_recipe_methods.py`](../ml_pipeline/bench_recipe_methods.py).
+Historical BGE results do not validate the current LFM2.5 classifiers, and recipe
+classification scores do not measure nutrition estimation accuracy.
 
-Fine-tuning bge-base end-to-end wins every task and is the accuracy ceiling,
-but the deployed classifiers stay on frozen embeddings (shared encoder pass,
-tiny checkpoints, one registry convention); the gap is 1-4 points. The
-stacking ensemble is the best deployable model on difficulty; CatBoost is the
-strongest single GBM on difficulty macro F1 (0.709).
+## Running the apps
 
-Nutrient regression (per-serving), kcal MAE / mean R2 over the 8 targets:
+Use the repository's `uv` environment and root dependency files
+(`requirements.txt`, or `requirements-mac.txt` on macOS). On macOS, LightGBM
+also requires the OpenMP runtime: `brew install libomp`.
 
-| Method | kcal MAE | mean R2 |
-|--------|----------|---------|
-| predict-train-mean baseline | 168.3 | -0.63 |
-| Ridge | 154.1 | -0.01 |
-| kNN retrieval | 161.7 | -0.06 |
-| LightGBM | 177.7 | -0.18 |
-| CatBoost (new) | 165.4 | -0.03 |
-| Stacking ensemble (new) | 174.2 | -0.07 |
-| **bge-base fine-tuned regression head** | **133.2** | **+0.20** |
-
-Frozen-embedding regressors barely beat the mean baseline: sentence
-embeddings do not encode ingredient quantities well. The fine-tuned
-regression head reads the raw text and is the only method with real signal
-(protein MAE 3.7 g vs 12.5 g baseline, fat 9.1 g, saturates 4.7 g, sugars
-11.9 g, salt 0.29 g). It is deployed as the primary nutrients model
-(`ml_pipeline/results/nutrients_bge_regressor/`), with CatBoost on
-embeddings as the fallback when the checkpoint or transformers is missing.
-
-**Coherence validation (2026-07)**. Per-recipe check on the 182 held-out
-test recipes: median kcal error 31%, 49% of recipes within +/-30% and 66%
-within +/-50% of the true per-serving calories (Spearman 0.43); protein and
-fat have larger relative errors on low-absolute-value recipes. Directional
-sanity checks all rank correctly (burger > salad kcal, cake > chicken
-sugars, chicken > cake protein, ...), but magnitudes compress toward the
-dataset mean, underestimating rich dishes. On three published recipes not
-in any split (BBC Good Food ME): chicken tikka masala predicted 339 kcal /
-29.6 g protein vs actual 345 / 31 (excellent); chocolate chip banana bread
-466 kcal vs 306 (overestimate); miso salmon traybake 394 kcal / 32.7 g
-protein vs 610 / 42 (underestimate, right profile). Verdict: usable as a
-per-serving ballpark and for comparing/ranking recipes; not tracking-grade,
-and the app labels it accordingly. NutriCoach meal logging continues to use
-the local nutrition DB + LLM portions, not this model.
-
-### Embedding Backend: bge-base vs jina-v5-omni-small
-
-`jinaai/jina-embeddings-v5-omni-small` (1.74B, 1024-d, CC BY-NC 4.0) was
-benchmarked against `BAAI/bge-base-en-v1.5` (109M, 768-d) as the recipe
-encoder. In that historical experiment, bge-base won on every task.
-`LocalEmbedder` remains available for existing checkpoints. Best method per
-task and backend:
-
-| Task | bge-base | jina-v5-omni-small |
-|------|----------|--------------------|
-| Difficulty (acc / f1) | 0.813 / 0.717 | 0.809 / 0.675 |
-| Meal binary (acc / f1) | 0.836 / 0.792 | 0.821 / 0.767 |
-| Time class (acc / f1) | 0.656 / 0.616 | 0.619 / 0.581 |
-| Nutrients (kcal MAE) | 154.1 | 159.4 |
-
-### Meal Type: Binary vs 3-Class
-
-The former 3-class head (Breakfast / Dinner / Lunch) topped out at 0.637
-test accuracy because Lunch and Dinner recipes are nearly indistinguishable
-from text; Breakfast-vs-rest separability is unchanged whether trained
-binary or 3-class (a 3-class model collapsed to binary scores up to 0.846).
-Training directly on the binary task lifts the deployed label's accuracy
-from ~0.64 to 0.81-0.85, so Recipe Lab now ships the binary
-`Breakfast` / `Lunch/Dinner` classifier.
-
-## Configuration
-
-Nutrition constants are in `shared/config.py`:
-- `BMR_CONSTANTS`: Mifflin-St Jeor equation parameters
-- `ACTIVITY_MULTIPLIERS`: sedentary through very active
-- `MACRO_RATIOS`: protein/carb/fat distribution
-- `WEIGHT_GOAL_ADJUSTMENTS`: caloric surplus/deficit for goals
-
-Environment variables:
-- `OPENROUTER_API_KEY`: Required for NutriCoach chat and OpenRouter food image analysis; optional for Recipe Lab
-- `OPENROUTER_MODEL_ID`: Optional chat model override in both apps; defaults to `stealth/space-bunny-alpha`
-- `ROBOFLOW_API_KEY`: Optional, for downloading food detection datasets
-
-## Testing
+Run from the repository root:
 
 ```bash
-# CPU suite (no keys or models needed)
-PYTHONPATH=.:nut_agent uv run python -m pytest nut_agent/tests/ -v \
-    --ignore=nut_agent/tests/test_gpu_pipeline.py --ignore=nut_agent/tests/test_openrouter_live.py
+# NutriCoach, including the Recipe Lab tab
+PYTHONPATH=. uv run streamlit run nut_agent/nutricoach/app.py
 
-# GPU integration suite (trained models, embedder, CLIP; cuda:1)
-CUDA_VISIBLE_DEVICES=1 PYTHONPATH=.:nut_agent uv run python -m pytest nut_agent/tests/test_gpu_pipeline.py -v
-
-# Live OpenRouter tests (skipped without OPENROUTER_API_KEY; tolerate free-tier 429s)
-PYTHONPATH=.:nut_agent uv run python -m pytest nut_agent/tests/test_openrouter_live.py -v
+# Standalone Recipe Lab
+PYTHONPATH=. uv run streamlit run nut_agent/recipe_lab/app.py
 ```
 
-The current checkout passed 110 tests with 19 skips using
-`PYTHONPATH=.:nut_agent uv run python -m pytest nut_agent/tests -q`.
-The skips cover unavailable GPU resources, live API credentials, and the
-model registry on macOS without `libomp`.
+Set `OPENROUTER_API_KEY` or enter it in the app for chat and API-based analysis.
+`OPENROUTER_MODEL_ID` sets the initial chat/recipe model; it is also editable in
+the UI. Food Analysis has a separate vision model field: choose a model that
+accepts images. Availability and cost depend on the selected provider and model.
+The sidebar's **Reasoning effort** defaults to `high` and applies to chat,
+recipes, and API-based Food Vision. Available levels are `low`, `medium`,
+`high`, `xhigh`, and `max`; choose one supported by the selected model.
+API calls have an 8,192-token combined reasoning/output budget.
+Recipe text, chat context, and photos used in API calls are sent to OpenRouter.
+Local user data and model caches live under `nut_agent/secrets/`, which is
+excluded from version control.
+
+## Code and tests
+
+`nutricoach/` contains the agent, tools, UI, and food vision methods;
+`recipe_lab/` contains the recipe UI and prediction pipeline. `shared/` holds
+configuration, authentication, Pydantic schemas, and structured memory.
+Recipe classifiers reuse the ML utilities in `ml_pipeline/`.
+
+Run the tests that do not require live APIs or GPU integration:
+
+```bash
+PYTHONPATH=. uv run python -m pytest nut_agent/tests/ -q \
+    --ignore=nut_agent/tests/test_gpu_pipeline.py \
+    --ignore=nut_agent/tests/test_openrouter_live.py
+```
+
+The separate GPU and live OpenRouter test modules exercise model inference and
+API integration when their required resources are available.

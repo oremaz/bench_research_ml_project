@@ -7,7 +7,7 @@ of detected items, calorie estimates, latency, and cost.
 Usage:
     python -m nutricoach.food_vision.compare --image plate.jpg
     python -m nutricoach.food_vision.compare --image-dir ./test_images/
-    python -m nutricoach.food_vision.compare --image plate.jpg --methods vlm_chain,rag_vlm
+    python -m nutricoach.food_vision.compare --image plate.jpg --methods vlm_single,rag_vlm
 """
 
 import argparse
@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from shared.config import OPENROUTER_MODEL_ID
+from shared.config import OPENROUTER_MODEL_ID, OPENROUTER_REASONING_EFFORT
 
 from .base import FoodAnalysisResult, FoodAnalyzer
 
@@ -36,8 +36,7 @@ def get_available_methods() -> Dict[str, type]:
         logger.debug("RF-DETR not available (install rfdetr)")
 
     try:
-        from .vlm_analyzer import VLMAnalyzer, VLMAnalyzerSingleShot
-        methods["vlm_chain"] = VLMAnalyzer
+        from .vlm_analyzer import VLMAnalyzerSingleShot
         methods["vlm_single"] = VLMAnalyzerSingleShot
     except ImportError:
         logger.debug("VLM analyzer not available (install openai)")
@@ -54,6 +53,16 @@ def get_available_methods() -> Dict[str, type]:
     except ImportError:
         logger.debug("RAG VLM not available (install openai)")
 
+    from .grounded_vlm_analyzer import GroundedVLMAnalyzer
+    methods["vlm_db_grounded"] = GroundedVLMAnalyzer
+
+    from .geometry_analyzer import GeometryVLMAnalyzer
+    methods["geometry_vlm_db"] = GeometryVLMAnalyzer
+
+    from .supervised_analyzers import RGBRegressionAnalyzer, FoodR1Analyzer
+    methods["rgb_regression"] = RGBRegressionAnalyzer
+    methods["food_r1"] = FoodR1Analyzer
+
     return methods
 
 
@@ -63,6 +72,10 @@ def run_comparison(
     rf_detr_weights: Optional[str] = None,
     openrouter_api_key: Optional[str] = None,
     model_id: str = OPENROUTER_MODEL_ID,
+    rf_detr_portion_weights: Optional[Dict[str, float]] = None,
+    rf_detr_labels: Optional[str] = None,
+    rf_detr_nutrition_names: Optional[Dict[str, str]] = None,
+    reasoning_effort: str = OPENROUTER_REASONING_EFFORT,
 ) -> Dict[str, FoodAnalysisResult]:
     """
     Run specified (or all) methods on a single image.
@@ -71,6 +84,9 @@ def run_comparison(
         image_path: Path to the food image.
         methods: List of method names to run. None = all available.
         rf_detr_weights: Path to fine-tuned RF-DETR weights.
+        rf_detr_portion_weights: Measured total edible grams per detected food label.
+        rf_detr_labels: Class mapping JSON or training COCO annotations.
+        rf_detr_nutrition_names: Explicit preparation-specific nutrition entries per label.
         openrouter_api_key: API key for OpenRouter (VLM methods).
         model_id: OpenRouter model for vision methods.
 
@@ -94,11 +110,14 @@ def run_comparison(
         try:
             # Instantiate with appropriate kwargs
             kwargs = {}
-            if name == "rf_detr" and rf_detr_weights:
-                kwargs["model_path"] = rf_detr_weights
-            if name in ("vlm_chain", "vlm_single", "rag_vlm") and openrouter_api_key:
+            if name not in ("rf_detr", "rgb_regression", "food_r1"):
+                kwargs["reasoning_effort"] = reasoning_effort
+            if name == "rf_detr":
+                kwargs.update(model_path=rf_detr_weights, portion_weights=rf_detr_portion_weights,
+                              labels_path=rf_detr_labels, nutrition_names=rf_detr_nutrition_names)
+            if name in ("vlm_single", "rag_vlm", "vlm_db_grounded", "geometry_vlm_db") and openrouter_api_key:
                 kwargs["api_key"] = openrouter_api_key
-            if name in ("vlm_chain", "vlm_single", "rag_vlm"):
+            if name in ("vlm_single", "rag_vlm", "vlm_db_grounded", "geometry_vlm_db"):
                 kwargs["model"] = model_id
             if name == "clip_ensemble" and openrouter_api_key:
                 kwargs["openrouter_api_key"] = openrouter_api_key
@@ -122,7 +141,7 @@ def format_comparison(results: Dict[str, FoodAnalysisResult]) -> str:
     """Format comparison results as a readable table."""
     lines = []
     lines.append("=" * 80)
-    lines.append("FOOD IMAGE ANALYSIS — METHOD COMPARISON")
+    lines.append("FOOD IMAGE ANALYSIS: METHOD COMPARISON")
     lines.append("=" * 80)
 
     for method, result in results.items():
@@ -196,6 +215,18 @@ def main():
         help="Path to fine-tuned RF-DETR weights"
     )
     parser.add_argument(
+        "--rf-detr-portions", type=str, default=None,
+        help="JSON file mapping food labels to measured total edible grams",
+    )
+    parser.add_argument(
+        "--rf-detr-labels", type=str, default=None,
+        help="Food class mapping JSON or training COCO annotations",
+    )
+    parser.add_argument(
+        "--rf-detr-nutrition", type=str, default=None,
+        help="JSON file mapping detector labels to exact local nutrition entry names",
+    )
+    parser.add_argument(
         "--output", type=str, default=None,
         help="Output JSON file for results"
     )
@@ -226,6 +257,14 @@ def main():
         return
 
     all_results = {}
+    portion_weights = None
+    nutrition_names = None
+    if args.rf_detr_nutrition:
+        with open(args.rf_detr_nutrition) as source:
+            nutrition_names = json.load(source)
+    if args.rf_detr_portions:
+        with open(args.rf_detr_portions) as source:
+            portion_weights = json.load(source)
     for img_path in images:
         print(f"\n{'='*60}")
         print(f"Analyzing: {img_path}")
@@ -235,6 +274,9 @@ def main():
             img_path,
             methods=method_list,
             rf_detr_weights=args.rf_detr_weights,
+            rf_detr_portion_weights=portion_weights,
+            rf_detr_labels=args.rf_detr_labels,
+            rf_detr_nutrition_names=nutrition_names,
         )
         all_results[img_path] = results
         print(format_comparison(results))

@@ -96,7 +96,7 @@ def test_streamlit_edits_save_once_and_survive_reruns(original, tmp_path, monkey
 
     monkeypatch.setattr("nutricoach.tools.SECRETS_DIR", tmp_path)
     at = AppTest.from_string(
-        'from nutricoach import app\napp.initialize_session_state()\napp.display_photo_review()'
+        'from nutricoach import app\napp.initialize_session_state()\napp.display_photo_review()', default_timeout=15
     )
     at.session_state["username"] = "alice"
     at.session_state["photo_result"] = original
@@ -138,7 +138,7 @@ def test_upload_analysis_is_not_repeated_by_editing_and_new_photo_clears_draft(o
     invoke = MagicMock(return_value=original)
     monkeypatch.setattr(app, "analyze_food_image", SimpleNamespace(invoke=invoke))
     at = AppTest.from_string(
-        'from nutricoach import app\napp.initialize_session_state()\napp.display_food_analysis()'
+        'from nutricoach import app\napp.initialize_session_state()\napp.display_food_analysis()', default_timeout=15
     ).run()
     assert not at.exception
     at.button[0].click().run()

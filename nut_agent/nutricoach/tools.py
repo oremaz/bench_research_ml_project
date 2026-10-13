@@ -18,7 +18,6 @@ from shared.config import (
     MACRO_RATIOS,
     WATER_ML_PER_KG,
     SECRETS_DIR,
-    OPENROUTER_MODEL_ID,
     OPENROUTER_REASONING_EFFORT,
 )
 from shared.utils import calculate_bmi, validate_nutrition_targets
@@ -397,12 +396,17 @@ def analyze_food_image(
         return {"error": f"Image not found: {image_path}"}
 
     try:
-        api_key = config.get("configurable", {}).get("openrouter_api_key")
-        model_id = config.get("configurable", {}).get("vision_model_id") or OPENROUTER_MODEL_ID
-        reasoning_effort = config.get("configurable", {}).get("reasoning_effort", OPENROUTER_REASONING_EFFORT)
+        provider = config.get("configurable", {}).get("llm_provider", "openrouter")
+        api_key = config.get("configurable", {}).get(f"{provider}_api_key")
+        from shared.llm_provider import default_model
+        model_id = config.get("configurable", {}).get("vision_model_id") or default_model(provider)
+        reasoning_effort = config.get("configurable", {}).get("reasoning_effort", "none" if provider == "local" else OPENROUTER_REASONING_EFFORT)
 
         from nutricoach.food_vision.vlm_analyzer import VLMAnalyzerSingleShot
-        analyzer = VLMAnalyzerSingleShot(api_key=api_key, model=model_id, reasoning_effort=reasoning_effort)
+        options = {"provider": provider,
+                   "device": config.get("configurable", {}).get("local_device"),
+                   "quantization": config.get("configurable", {}).get("local_quantization", "none")}
+        analyzer = VLMAnalyzerSingleShot(api_key=api_key, model=model_id, reasoning_effort=reasoning_effort, **options)
 
         result = analyzer.analyze(image_path)
 

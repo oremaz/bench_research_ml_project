@@ -21,8 +21,9 @@ from langgraph.prebuilt import ToolNode
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
-from shared.config import OPENROUTER_MODEL_ID, OPENROUTER_REASONING_EFFORT, OPENROUTER_MAX_OUTPUT_TOKENS, openrouter_reasoning, SECRETS_DIR
+from shared.config import OPENROUTER_REASONING_EFFORT, SECRETS_DIR
 from shared.memory import MemoryManager
+from shared.llm_provider import chat_settings, default_model
 from nutricoach.tools import ALL_TOOLS
 
 
@@ -81,29 +82,29 @@ def build_nutricoach_graph(
     openrouter_api_key: str,
     username: str,
     use_checkpointer: bool = True,
-    model_id: str = OPENROUTER_MODEL_ID,
-    reasoning_effort: str = OPENROUTER_REASONING_EFFORT,
+    model_id: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
+    provider: str = "openrouter",
+    local_device: Optional[str] = None,
+    local_quantization: str = "none",
 ) -> Any:
     """
     Build and return the NutriCoach LangGraph agent.
 
     Args:
-        openrouter_api_key: OpenRouter API key
+        openrouter_api_key: Selected hosted provider's key; empty for local inference
         username: Current user's username (for memory access)
         use_checkpointer: Whether to use SqliteSaver for persistence
-        model_id: OpenRouter model identifier
+        model_id: Selected provider's model identifier
 
     Returns:
         Compiled LangGraph
     """
     # Initialize LLM with tools bound
-    llm = ChatOpenAI(
-        model=model_id,
-        api_key=openrouter_api_key,
-        base_url="https://openrouter.ai/api/v1",
-        extra_body=openrouter_reasoning(reasoning_effort),
-        max_tokens=OPENROUTER_MAX_OUTPUT_TOKENS,
-    )
+    model_id = model_id or default_model(provider)
+    reasoning_effort = reasoning_effort if reasoning_effort is not None else ("none" if provider == "local" else OPENROUTER_REASONING_EFFORT)
+    llm = ChatOpenAI(**chat_settings(provider, openrouter_api_key, model_id, reasoning_effort,
+                                    device=local_device, quantization=local_quantization))
     llm_with_tools = llm.bind_tools(ALL_TOOLS)
 
     # Memory manager for context assembly

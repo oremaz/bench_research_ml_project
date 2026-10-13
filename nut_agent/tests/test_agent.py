@@ -19,8 +19,6 @@ from nutricoach.tools import log_daily_intake
 from nutricoach.tools import analyze_food_image
 from nutricoach.food_vision.base import FoodAnalysisResult, FoodItem
 from nutricoach.food_vision.vlm_analyzer import VLMAnalyzer, VLMAnalyzerSingleShot
-from nutricoach.food_vision.rag_vlm_analyzer import RAGVLMAnalyzer
-from nutricoach.food_vision.clip_analyzer import CLIPFoodAnalyzer
 from shared.config import OPENROUTER_MODEL_ID
 
 
@@ -191,7 +189,8 @@ def test_photo_estimate_is_logged_only_on_request(tmp_path, monkeypatch):
         image.write_bytes(b"image")
         config = {"configurable": {"username": "alice", "openrouter_api_key": "vision-key", "vision_model_id": "test/vision"}}
         analyze_food_image.invoke({"image_path": str(image)}, config=config)
-        analyzer.assert_called_with(api_key="vision-key", model="test/vision", reasoning_effort="high")
+        analyzer.assert_called_with(api_key="vision-key", model="test/vision", reasoning_effort="high",
+                                    provider="openrouter", device=None, quantization="none")
         from shared.memory import MemoryManager
         memory = MemoryManager("alice", tmp_path)
         assert memory.load_todays_log() is None
@@ -202,7 +201,5 @@ def test_photo_estimate_is_logged_only_on_request(tmp_path, monkeypatch):
 def test_vision_methods_default_to_shared_openrouter_model():
     assert VLMAnalyzer().model == OPENROUTER_MODEL_ID
     assert VLMAnalyzerSingleShot().model == OPENROUTER_MODEL_ID
-    assert RAGVLMAnalyzer().model == OPENROUTER_MODEL_ID
-    assert CLIPFoodAnalyzer().llm_model == OPENROUTER_MODEL_ID
-    for analyzer in (VLMAnalyzer(), RAGVLMAnalyzer(), CLIPFoodAnalyzer()):
+    for analyzer in (VLMAnalyzer(), VLMAnalyzerSingleShot()):
         assert analyzer.reasoning_effort == "high"

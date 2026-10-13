@@ -36,7 +36,7 @@ import pandas as pd
 
 from langchain_core.messages import HumanMessage, AIMessage
 
-from shared.config import OPENROUTER_MODEL_ID, OPENROUTER_REASONING_EFFORT, OPENROUTER_REASONING_EFFORTS, SECRETS_DIR, STREAMLIT_CONFIG
+from shared.config import OPENROUTER_MODEL_ID, OPENROUTER_REASONING_EFFORT, SECRETS_DIR, STREAMLIT_CONFIG
 from shared.auth import (
     authenticate_user,
     register_user,
@@ -48,6 +48,7 @@ from nutricoach.agent import build_nutricoach_graph, create_initial_state
 from nutricoach.tools import analyze_food_image, save_photo_analysis
 from nutricoach.food_vision.nutrition_db import NutritionDB
 from nutricoach.food_vision.review import NUTRIENT_FIELDS, photo_edit_rows, apply_photo_edits
+from shared.llm_provider import PROVIDERS, REASONING_EFFORTS, default_model
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,12 @@ def initialize_session_state():
         "thread_id": None,
         "chat_history": [],
         "vision_model_id": OPENROUTER_MODEL_ID,
+        "llm_provider": "openrouter",
+        "chat_model_id": default_model("openrouter"),
+        "api_key": os.getenv("OPENROUTER_API_KEY", ""),
+        "groq_api_key": os.getenv("GROQ_API_KEY", ""),
+        "local_quantization": "none",
+        "local_device": os.getenv("LOCAL_LLM_DEVICE") or None,
         "reasoning_effort": OPENROUTER_REASONING_EFFORT,
     }
     for key, val in defaults.items():
@@ -94,6 +101,10 @@ def _thread_config() -> dict:
         "thread_id": st.session_state.get("thread_id", "default"),
         "username": st.session_state.get("username"),
         "openrouter_api_key": st.session_state.get("api_key"),
+        "groq_api_key": st.session_state.get("groq_api_key"),
+        "llm_provider": st.session_state.get("llm_provider", "openrouter"),
+        "local_device": st.session_state.get("local_device"),
+        "local_quantization": st.session_state.get("local_quantization", "none"),
         "vision_model_id": st.session_state.get("vision_model_id", OPENROUTER_MODEL_ID),
         "reasoning_effort": st.session_state.get("reasoning_effort", OPENROUTER_REASONING_EFFORT),
     }}
@@ -161,29 +172,56 @@ def _ensure_memory_migrated(username):
 # --- Init Agent ---
 
 
+def _change_llm_provider():
+    provider = st.session_state["llm_provider"]
+    st.session_state["chat_model_id"] = default_model(provider)
+    st.session_state["vision_model_id"] = default_model(provider)
+    st.session_state["reasoning_effort"] = "none" if provider == "local" else "high"
+    st.session_state["agent_graph"] = None
+
+
+def display_llm_settings():
+    provider = st.selectbox("Model provider", PROVIDERS, key="llm_provider",
+                            format_func=lambda value: {"openrouter": "OpenRouter", "groq": "Groq", "local": "Local (Qwen)"}[value],
+                            on_change=_change_llm_provider)
+    if provider != "local":
+        label, key = ("OpenRouter", "api_key") if provider == "openrouter" else ("Groq", "groq_api_key")
+        st.text_input(f"{label} API Key", type="password", key=key)
+    else:
+        st.selectbox("Local precision", ("none", "4bit"), key="local_quantization",
+                     format_func=lambda value: "BF16" if value == "none" else "4-bit (CUDA)")
+        st.caption("Local inference needs downloaded weights and sufficient memory. 4-bit mode reduces GPU memory use.")
+    st.text_input("Chat model ID", key="chat_model_id")
+    st.selectbox("Reasoning effort", REASONING_EFFORTS[provider], key="reasoning_effort",
+                 help="Applies to NutriCoach chat and Food Vision.")
+
+
 def init_agent():
+    provider = st.session_state.get("llm_provider", "openrouter")
     reasoning_effort = st.session_state.get("reasoning_effort", OPENROUTER_REASONING_EFFORT)
+    api_key = st.session_state.get("api_key" if provider == "openrouter" else "groq_api_key", "")
+    model_id = st.session_state.get("chat_model_id") or default_model(provider)
+    signature = (provider, api_key if provider != "local" else None, model_id, reasoning_effort,
+                 st.session_state.get("local_device"), st.session_state.get("local_quantization", "none"))
     if (st.session_state["agent_graph"] is not None
-            and st.session_state.get("agent_reasoning_effort") == reasoning_effort):
+            and st.session_state.get("agent_settings") == signature):
         return True
-    api_key = st.text_input("OpenRouter API Key", type="password", value=st.session_state.get("api_key") or os.environ.get("OPENROUTER_API_KEY", ""))
-    model_id = st.text_input("OpenRouter model ID", value=st.session_state.get("model_id") or os.environ.get("OPENROUTER_MODEL_ID", OPENROUTER_MODEL_ID))
-    st.caption("Default model: [dots-studio/dots-3-note-preview:free](https://openrouter.ai/dots-studio/dots-3-note-preview:free)")
-    if api_key:
-        st.session_state["api_key"] = api_key
-        st.session_state["model_id"] = model_id.strip() or OPENROUTER_MODEL_ID
+    if api_key or provider == "local":
         username = st.session_state.get("username", "anonymous")
         try:
-            st.session_state["agent_graph"] = build_nutricoach_graph(api_key, username, model_id=model_id.strip() or OPENROUTER_MODEL_ID,
-                                                                       reasoning_effort=reasoning_effort)
-            st.session_state["agent_reasoning_effort"] = reasoning_effort
+            st.session_state["agent_graph"] = build_nutricoach_graph(
+                api_key, username, model_id=model_id.strip() or default_model(provider),
+                reasoning_effort=reasoning_effort, provider=provider,
+                local_device=st.session_state.get("local_device"),
+                local_quantization=st.session_state.get("local_quantization", "none"))
+            st.session_state["agent_settings"] = signature
             st.success("Agent initialized!")
             return True
         except Exception as e:
             st.error(f"Failed to initialize agent: {e}")
             return False
     else:
-        st.warning("Please enter your OpenRouter API key.")
+        st.warning(f"Please enter your {provider.title()} API key.")
         return False
 
 
@@ -280,7 +318,7 @@ def display_food_analysis():
     st.subheader("Analyze Food Photo")
     st.markdown("Upload a photo of your meal to estimate ingredients, portions, and calories.")
     st.caption("Food photos are analyzed with Single-shot VLM.")
-    st.text_input("Vision model ID", key="vision_model_id", help="Choose an OpenRouter model that accepts images.")
+    st.text_input("Vision model ID", key="vision_model_id", help="Choose a model that accepts images from the selected provider.")
 
     uploaded = st.file_uploader("Upload a food image", type=["jpg", "jpeg", "png", "webp"])
     context = (st.session_state.get("username"), hashlib.sha256(uploaded.getvalue()).hexdigest()) if uploaded else None
@@ -646,8 +684,7 @@ def main_app():
     # Sidebar
     with st.sidebar:
         st.title("Control Panel")
-        st.selectbox("Reasoning effort", OPENROUTER_REASONING_EFFORTS, key="reasoning_effort",
-                     help="Applies to chat, recipes, and Food Vision. Choose a level supported by your model.")
+        display_llm_settings()
         if not init_agent():
             st.stop()
         st.markdown("---")
@@ -687,7 +724,7 @@ def main_app():
         display_daily_results()
 
     st.markdown("---")
-    st.caption("NutriCoach v2: LangGraph, SqliteSaver, OpenRouter, and Food Vision")
+    st.caption("NutriCoach v2: LangGraph, SqliteSaver, and Food Vision")
 
 
 # --- Entry Point ---

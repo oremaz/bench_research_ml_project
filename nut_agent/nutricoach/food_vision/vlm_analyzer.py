@@ -1,9 +1,9 @@
 """
-Method 2: Single-shot vision-language model baseline via OpenRouter.
+Single-shot vision-language baseline via OpenRouter, Groq or local Qwen.
 
 One image prompt produces foods, estimated grams, and calorie/macro values.
-No local nutrition database is queried. Requires an OpenRouter API key and
-an image-capable model; this module does not use the vLLM library.
+No local nutrition database is queried. Hosted inference requires the selected
+provider's API key; local inference uses cached Transformers weights.
 """
 
 import json
@@ -12,7 +12,8 @@ import os
 import time
 from typing import Optional
 
-from shared.config import OPENROUTER_MODEL_ID, OPENROUTER_REASONING_EFFORT, OPENROUTER_MAX_OUTPUT_TOKENS, openrouter_reasoning
+from shared.config import OPENROUTER_REASONING_EFFORT, OPENROUTER_MAX_OUTPUT_TOKENS
+from shared.llm_provider import create_client, default_model, request_settings, LOCAL_MODEL_REVISION
 
 from .base import (
     FoodAnalyzer,
@@ -58,29 +59,41 @@ Be thorough — include sauces, condiments, garnishes, drinks. Use standard nutr
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = OPENROUTER_MODEL_ID,
-        base_url: str = "https://openrouter.ai/api/v1",
-        reasoning_effort: str = OPENROUTER_REASONING_EFFORT,
+        model: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
+        provider: str = "openrouter",
+        device: Optional[str] = None,
+        quantization: str = "none",
+        revision: str = LOCAL_MODEL_REVISION,
+        max_output_tokens: int = OPENROUTER_MAX_OUTPUT_TOKENS,
     ):
-        self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
-        self.model = model or OPENROUTER_MODEL_ID
-        self.base_url = base_url
-        self.reasoning_effort = reasoning_effort
+        self.provider = provider
+        self.api_key = api_key or os.environ.get(f"{provider.upper()}_API_KEY", "")
+        self.model = model or default_model(provider)
+        self.reasoning_effort = reasoning_effort if reasoning_effort is not None else (
+            "none" if provider == "local" else OPENROUTER_REASONING_EFFORT)
+        self.device, self.quantization, self.revision = device, quantization, revision
+        self.max_output_tokens = max_output_tokens
         self._client = None
 
     def _get_client(self):
         if self._client is None:
-            from openai import OpenAI
-            self._client = OpenAI(base_url=self.base_url, api_key=self.api_key)
+            self._client = create_client(self.provider, self.api_key, model=self.model,
+                                         device=self.device, quantization=self.quantization, revision=self.revision)
         return self._client
+
+    def _request_options(self):
+        token_field = "max_completion_tokens" if self.provider == "groq" else "max_tokens"
+        return {token_field: self.max_output_tokens, "temperature": 0.1,
+                **request_settings(self.provider, self.reasoning_effort)}
 
     def analyze(self, image_path: str) -> FoodAnalysisResult:
         start = time.time()
         result = FoodAnalysisResult(method=self.method_name)
 
         try:
-            if not self.api_key:
-                raise ValueError("OPENROUTER_API_KEY not set.")
+            if self.provider != "local" and not self.api_key:
+                raise ValueError(f"{self.provider.upper()}_API_KEY not set.")
 
             b64 = encode_image_to_base64(image_path)
             media_type = get_image_media_type(image_path)
@@ -95,12 +108,10 @@ Be thorough — include sauces, condiments, garnishes, drinks. Use standard nutr
                         {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}},
                     ],
                 }],
-                max_tokens=OPENROUTER_MAX_OUTPUT_TOKENS,
-                extra_body=openrouter_reasoning(self.reasoning_effort),
-                temperature=0.1,
+                **self._request_options(),
             )
 
-            raw = response.choices[0].message.content.strip()
+            raw = (response.choices[0].message.content or "").strip()
             result.raw_response = raw
             parsed = self._parse_json(raw, dict)
 

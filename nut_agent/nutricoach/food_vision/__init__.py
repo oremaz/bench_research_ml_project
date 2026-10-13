@@ -1,8 +1,7 @@
 """
 Food Vision module: multiple methods for food image analysis.
 
-Primary benchmark: single-shot VLM, RGB regression, specialized Food-R1,
-and RGB geometry with nutrition lookup. Legacy research analyzers are retained.
+Primary benchmark: single-shot VLM, RGB regression and specialized Food-R1.
 """
 
 from .base import FoodAnalysisResult, FoodAnalyzer

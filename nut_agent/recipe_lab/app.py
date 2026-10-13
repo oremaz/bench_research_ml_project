@@ -20,6 +20,8 @@ def get_predictor():
     api_key = st.session_state.get("api_key") or os.environ.get("OPENROUTER_API_KEY", "")
     model_id = st.session_state.get("model_id") or OPENROUTER_MODEL_ID
     reasoning_effort = st.session_state.get("reasoning_effort", OPENROUTER_REASONING_EFFORT)
+    if reasoning_effort not in OPENROUTER_REASONING_EFFORTS:
+        reasoning_effort = OPENROUTER_REASONING_EFFORT
     predictor = st.session_state.get("food_predictor")
     if predictor is None or predictor.api_key != api_key or predictor.model_id != model_id:
         from recipe_lab.predictor import FoodModelPredictor

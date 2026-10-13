@@ -31,10 +31,17 @@ This choice follows the Nutrition5k pilot runs, which did not establish a clear
 accuracy gain from the extra pipeline steps. The comparison scripts, alternative
 methods, and recorded results remain available for research in
 [Food Vision](nutricoach/food_vision/README.md). Its revised benchmark compares
-single-shot VLM, RGB regression, specialized Food-R1 and a geometry/database
-hybrid on a reproducible 50-dish official-test subset, scoring calories, macros
-and total mass. The Dots baseline is complete; pending methods and the prepared
-Jean Zay job are documented separately from measured results.
+single-shot VLM, RGB regression and specialized Food-R1
+on a reproducible 500-dish official-test subset, scoring calories, macros
+and total mass. It also runs the public FoodLMM author checkpoint and a separately
+labeled third-party DPF reproduction. FoodLMM has separate 16-bit and 4-bit
+decoder benchmark rows, with CUDA/MPS device selection in its isolated runner.
+The original 16-bit row is retained alongside a cached 16-bit control for matched
+precision comparisons.
+MPS requires validation on Apple hardware. The four older RF-DETR, CLIP, RAG and
+standalone database-grounded pipelines and the geometry hybrid have been removed. Current measurements,
+H100 jobs and unavailable paper systems are documented in Food Vision; the
+50-dish reports remain historical pilot results.
 
 ## Recipe Lab
 
@@ -83,15 +90,29 @@ PYTHONPATH=. uv run streamlit run nut_agent/nutricoach/app.py
 PYTHONPATH=. uv run streamlit run nut_agent/recipe_lab/app.py
 ```
 
-Set `OPENROUTER_API_KEY` or enter it in the app for chat and API-based analysis.
-`OPENROUTER_MODEL_ID` sets the initial chat/recipe model; it is also editable in
-the UI. Food Analysis has a separate vision model field: choose a model that
-accepts images. Availability and cost depend on the selected provider and model.
-The sidebar's **Reasoning effort** defaults to `high` and applies to chat,
-recipes, and API-based Food Vision. Available levels are `low`, `medium`,
-`high`, `xhigh`, and `max`; choose one supported by the selected model.
-API calls have an 8,192-token combined reasoning/output budget.
-Recipe text, chat context, and photos used in API calls are sent to OpenRouter.
+The sidebar's **Model provider** selects **OpenRouter**, **Groq**, or
+**Local (Qwen)** for NutriCoach chat and food photos. OpenRouter is the default.
+Set `OPENROUTER_API_KEY` or `GROQ_API_KEY`, or enter the selected provider's key
+in the sidebar. Keys are separate. Local inference needs no API key and runs
+`Qwen/Qwen3.8-27B` through Transformers in the Streamlit process.
+Chat and vision model IDs remain separately editable. `OPENROUTER_MODEL_ID`,
+`GROQ_MODEL_ID`, and `LOCAL_MODEL_ID` override provider defaults.
+Choose image-capable models for photos. Provider switches reset both model IDs
+and reasoning settings to compatible defaults and rebuild the chat agent.
+Reasoning defaults to `high` for hosted providers and `none` locally;
+the menu exposes each backend's supported levels. Local generation is greedy.
+Responses have an 8,192-token budget. Hosted chat/photos go to the selected
+provider; local inputs remain on the machine running Streamlit.
+Local **BF16** needs roughly 58 GB just for weights plus working memory;
+**4-bit (CUDA)** needs `bitsandbytes` from the root GPU dependencies and reduces
+GPU memory use. BF16 is the default and the precision used for the H100 benchmark;
+4-bit is an optional memory-saving setting whose accuracy needs separate evaluation.
+This does not establish compatibility with a 32 GB CPU-only
+machine. The H100 smoke test measured 18.52 GiB peak reserved GPU memory in
+4-bit mode, but 52.12 GiB peak host RSS during loading.
+`LOCAL_LLM_DEVICE` can select an explicit local device.
+See [Food Vision setup and benchmark commands](nutricoach/food_vision/README.md).
+Recipe Lab retains its existing OpenRouter configuration.
 Local user data and model caches live under `nut_agent/secrets/`, which is
 excluded from version control.
 
@@ -112,3 +133,14 @@ PYTHONPATH=. uv run python -m pytest nut_agent/tests/ -q \
 
 The separate GPU and live OpenRouter test modules exercise model inference and
 API integration when their required resources are available.
+On 2026-10-12 the complete NutriCoach suite passed on H100 with **192 passed and
+12 skipped**, including real local Qwen photo and chat tool inference; this
+historical suite also included the subsequently removed geometry tests.
+The separate 4-bit memory test also passed. See
+[local Qwen validation](nutricoach/food_vision/qwen_local_validation.md) for resource
+measurements and skipped checks, and
+[Qwen benchmark results](nutricoach/food_vision/nutrition5k_500_qwen_results.md)
+for the completed 500-dish one-shot baseline and five remaining methods.
+After geometry removal, the current NutriCoach suite passed with **171 passed
+and 7 skipped**, excluding live hosted and GPU integration modules. Streamlit
+checks passed; real GPU inference was not rerun for this deletion.

@@ -1,14 +1,12 @@
-"""GPU integration tests for the trained recipe models and food vision stack.
+"""GPU integration tests for the trained recipe models.
 
 Run on the GPU box with:
     CUDA_VISIBLE_DEVICES=1 PYTHONPATH=nut_agent uv run python -m pytest nut_agent/tests/test_gpu_pipeline.py -v
 
 Tests are skipped when no CUDA device or no trained checkpoints are available,
 so the suite stays green on CPU-only checkouts.
-Set RUN_SLOW_GPU_TESTS=1 to include RF-DETR inference (downloads/loads ~500MB).
 """
 
-import os
 import sys
 import json
 from pathlib import Path
@@ -24,33 +22,15 @@ import torch
 REPO_ROOT = Path(__file__).parent.parent.parent
 RESULTS_DIR = REPO_ROOT / "ml_pipeline" / "results"
 META_PATH = RESULTS_DIR / "recipe_models_meta.json"
-FOOD_VISION_DIR = REPO_ROOT / "nut_agent" / "nutricoach" / "food_vision"
-RF_DETR_WEIGHTS_DIR = FOOD_VISION_DIR / "results" / "rf_detr_food"
 
 requires_cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
 requires_checkpoints = pytest.mark.skipif(not META_PATH.exists(), reason="trained checkpoints not available")
-slow = pytest.mark.skipif(os.environ.get("RUN_SLOW_GPU_TESTS") != "1", reason="set RUN_SLOW_GPU_TESTS=1")
 
 
 @pytest.fixture(scope="module")
 def predictor():
     from recipe_lab.predictor import FoodModelPredictor
     return FoodModelPredictor()
-
-
-@pytest.fixture(scope="module")
-def synthetic_food_image(tmp_path_factory):
-    """A simple synthetic plate image; enough to exercise vision pipelines."""
-    from PIL import Image, ImageDraw
-
-    img = Image.new("RGB", (512, 512), (240, 235, 225))
-    draw = ImageDraw.Draw(img)
-    draw.ellipse([56, 56, 456, 456], fill=(250, 250, 250), outline=(200, 200, 200), width=4)
-    draw.ellipse([120, 140, 280, 260], fill=(180, 120, 60))
-    draw.ellipse([260, 240, 400, 360], fill=(90, 140, 60))
-    path = tmp_path_factory.mktemp("imgs") / "plate.jpg"
-    img.save(path, "JPEG")
-    return str(path)
 
 
 @requires_cuda
@@ -127,55 +107,3 @@ class TestTrainedRecipeModels:
                           ("meal_type", "meal_type_labels"),
                           ("time_class", "time_class_labels")]:
             assert meta["tasks"][task]["labels"] == getattr(predictor, key)
-
-@requires_cuda
-class TestCLIPAnalyzerGPU:
-    def test_clip_classification_runs_on_cuda(self, synthetic_food_image):
-        from nutricoach.food_vision.clip_analyzer import CLIPFoodAnalyzer
-
-        analyzer = CLIPFoodAnalyzer(openrouter_api_key="", device="cuda")
-        results = analyzer._classify_food(synthetic_food_image)
-        assert analyzer.device == "cuda"
-        assert isinstance(results, list)
-        for label, score in results:
-            assert isinstance(label, str)
-            assert 0.0 <= score <= 1.0
-
-    def test_full_pipeline_without_llm(self, synthetic_food_image):
-        from nutricoach.food_vision.clip_analyzer import CLIPFoodAnalyzer
-
-        analyzer = CLIPFoodAnalyzer(openrouter_api_key="", device="cuda")
-        result = analyzer.analyze(synthetic_food_image)
-        assert result.error is None
-        assert result.method == "clip_ensemble"
-        for item in result.food_items:
-            assert item.quantity_grams > 0
-            assert item.calories >= 0
-        assert result.total_calories == pytest.approx(
-            sum(i.calories for i in result.food_items), abs=1e-6)
-
-    @slow
-    def test_jina_backend_classification(self, synthetic_food_image):
-        from nutricoach.food_vision.clip_analyzer import CLIPFoodAnalyzer
-
-        analyzer = CLIPFoodAnalyzer(openrouter_api_key="", device="cuda", backend="jina")
-        results = analyzer._classify_food(synthetic_food_image)
-        assert isinstance(results, list) and results
-        for label, score in results:
-            assert isinstance(label, str)
-            assert 0.0 <= score <= 1.0
-
-
-@requires_cuda
-class TestRFDETRAnalyzer:
-    @slow
-    def test_finetuned_weights_load_if_present(self, synthetic_food_image):
-        from nutricoach.food_vision.rf_detr_analyzer import RFDETRAnalyzer
-
-        weights = sorted(RF_DETR_WEIGHTS_DIR.glob("*.pth"))
-        if not weights:
-            pytest.skip("no fine-tuned RF-DETR checkpoint yet")
-        analyzer = RFDETRAnalyzer(model_path=str(weights[-1]))
-        analyzer._load_model()
-        detections = analyzer._model.predict(synthetic_food_image)
-        assert all(int(class_id) in analyzer.class_names for class_id in detections.class_id)

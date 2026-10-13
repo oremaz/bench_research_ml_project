@@ -11,7 +11,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from nutricoach.food_vision.evaluate_nutrition5k import APITracker, RequestLimiter, run_evaluation, parse_metadata, select_dishes, summarize, prediction_values
 from nutricoach.food_vision.base import FoodAnalysisResult, FoodItem
-from nutricoach.food_vision.rag_vlm_analyzer import RAGVLMAnalyzer
 
 
 def test_released_metadata_column_order():
@@ -19,17 +18,79 @@ def test_released_metadata_column_order():
     assert metadata["dish_1"] == {"calories": 250, "mass_g": 200, "fat_g": 10, "carbs_g": 30, "protein_g": 15}
 
 
-def test_selection_is_reproducible_and_excludes_train_and_missing_overhead():
-    rgb = {f"dish_{i}" for i in range(100)}
-    depth = {f"dish_{i}" for i in range(70)}
+@pytest.mark.parametrize("count, eligible_count", [(50, 70), (500, 507)])
+def test_selection_is_reproducible_and_excludes_train_and_missing_overhead(count, eligible_count):
+    rgb = {f"dish_{i}" for i in range(eligible_count + 30)}
+    depth = {f"dish_{i}" for i in range(eligible_count)}
     metadata = {dish: {} for dish in rgb}
-    selection, eligible = select_dishes(rgb, depth, {"dish_train"}, metadata, 50, 42)
-    assert eligible == 70
-    assert len(set(selection)) == 50
+    selection, eligible = select_dishes(rgb, depth, {"dish_train"}, metadata, count, 42)
+    assert eligible == eligible_count
+    assert len(set(selection)) == count
     assert set(selection) <= depth
-    assert selection == select_dishes(rgb, depth, {"dish_train"}, metadata, 50, 42)[0]
+    assert selection == select_dishes(rgb, depth, {"dish_train"}, metadata, count, 42)[0]
     with pytest.raises(ValueError, match="overlap"):
-        select_dishes(rgb, depth, {"dish_1"}, metadata, 50, 42)
+        select_dishes(rgb, depth, {"dish_1"}, metadata, count, 42)
+    with pytest.raises(ValueError, match="eligible test"):
+        select_dishes(rgb, depth, {"dish_train"}, metadata, eligible_count + 1, 42)
+
+
+def test_report_includes_paper_runs_and_rejects_mismatched_manifest(tmp_path):
+    from nutricoach.food_vision.report_nutrition5k import build_report, markdown_report
+    from nutricoach.food_vision.evaluate_nutrition5k import digest, write_json
+
+    manifest = {"seed": 42, "dish_ids": ["a", "b"], "references": {
+        dish: dict.fromkeys(("calories", "mass_g", "fat_g", "carbs_g", "protein_g"), 100)
+        for dish in ("a", "b")}}
+    manifest_path = tmp_path / "manifest.json"
+    write_json(manifest_path, manifest)
+    run = tmp_path / "run"
+    from shared.config import OPENROUTER_MODEL_ID
+    write_json(run / "configuration.json", {"manifest_sha256": digest(manifest_path), "model": OPENROUTER_MODEL_ID})
+    write_json(run / "vlm_single.json", {"a": {
+        "dish_id": "a", "prediction": manifest["references"]["a"] | {"calories": 150}, "inference_seconds": 1}})
+    write_json(run / "foodlmm.json", {"a": {
+        "dish_id": "a", "prediction": manifest["references"]["a"], "inference_seconds": 1}})
+    quantized = tmp_path / "quantized"
+    write_json(quantized / "configuration.json", {"manifest_sha256": digest(manifest_path)})
+    write_json(quantized / "foodlmm_4bit.json", {"a": {
+        "dish_id": "a", "prediction": manifest["references"]["a"] | {"calories": 110}, "inference_seconds": 2}})
+    write_json(quantized / "resources.json", {"device": "cuda", "inference_memory": {
+        "gpu_peak_allocated_gib": 5, "gpu_peak_reserved_gib": 6}, "loading_memory": {
+        "gpu_peak_allocated_gib": 7}, "peak_host_rss_gib": 8})
+    cached = tmp_path / "cached"
+    write_json(cached / "configuration.json", {"manifest_sha256": digest(manifest_path), "generation_use_cache": True})
+    write_json(cached / "foodlmm.json", {"a": {
+        "dish_id": "a", "prediction": manifest["references"]["a"] | {"calories": 105}, "inference_seconds": 1}})
+    report = build_report(manifest_path, [run, cached, quantized])
+    assert report["summary"]["methods"]["foodlmm"]["successful"] == 1
+    markdown = markdown_report(report)
+    assert "| FoodLMM (16-bit) | 1 / 2 | 0.0" in markdown
+    assert "| FoodLMM (4-bit decoder) | 1 / 2 | 10.0" in markdown
+    assert "| FoodLMM (16-bit, cached) | 1 / 2 | 5.0" in markdown
+    assert "| foodlmm | 1 | -50.0 | [-50.0, -50.0] |" in markdown
+    assert "| calories | 1 | 5.00 | [5.00, 5.00] |" in markdown
+    assert "| foodlmm_4bit | cuda | 2.00 | 5.00 | 6.00 | 7.00 | 8.00 |" in markdown
+    manifest["dish_ids"] = ["a"]
+    write_json(manifest_path, manifest)
+    with pytest.raises(ValueError, match="Different frozen test manifest"):
+        build_report(manifest_path, [run])
+
+
+@pytest.mark.parametrize("cuda, mps, expected", [(True, True, "cuda"), (False, True, "mps"), (False, False, "cpu")])
+def test_paper_device_selection(monkeypatch, cuda, mps, expected):
+    from nutricoach.food_vision.evaluate_paper_system import select_device
+
+    torch = SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: cuda),
+        backends=SimpleNamespace(mps=SimpleNamespace(is_available=lambda: mps)),
+        device=lambda name: SimpleNamespace(type=name.split(":")[0]))
+    monkeypatch.setitem(sys.modules, "torch", torch)
+    assert select_device("auto").type == expected
+    if not mps:
+        with pytest.raises(ValueError, match="MPS is unavailable"):
+            select_device("mps")
+    if not cuda:
+        with pytest.raises(ValueError, match="CUDA is unavailable"):
+            select_device("cuda:0")
 
 
 def test_failures_are_not_silently_scored_as_zero():
@@ -72,12 +133,6 @@ def test_normalized_error_uses_mean_reference_and_pairing_excludes_failures():
     assert summarize(records, manifest, list(records), 42)["common_successful_dishes"] == 1
 
 
-def test_portion_adjustment_scales_nutrition_consistently():
-    item = {"name": "rice", "quantity_grams": 10, "calories": 13, "protein_g": 0.27, "carbs_g": 2.8, "fat_g": 0.03}
-    adjusted = RAGVLMAnalyzer()._cross_validate_portions([item])[0]
-    assert adjusted["quantity_grams"] == 130
-    assert adjusted["calories"] == pytest.approx(169)
-    assert adjusted["protein_g"] == pytest.approx(3.51)
 
 
 @pytest.mark.parametrize("effort", ["low", "high"])
@@ -130,7 +185,6 @@ def test_parallel_evaluation_keeps_usage_with_its_image(tmp_path, monkeypatch):
     monkeypatch.setattr(APITracker, "client", client)
     monkeypatch.setattr("nutricoach.food_vision.evaluate_nutrition5k.get_available_methods",
                         lambda: {"vlm_single": Analyzer})
-    monkeypatch.setattr("nutricoach.food_vision.evaluate_nutrition5k.DEFAULT_MODEL_PATH", tmp_path / "missing.pth")
     args = SimpleNamespace(workers=3, methods=["vlm_single"], data_dir=data_dir, output_dir=tmp_path / "results",
                            model="test", max_output_tokens=8192, reasoning_effort="high", request_interval=0,
                            retry_errors=False, seed=42)

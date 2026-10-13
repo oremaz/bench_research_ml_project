@@ -21,16 +21,15 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from shared.config import OPENROUTER_MODEL_ID, OPENROUTER_REASONING_EFFORT, OPENROUTER_MAX_OUTPUT_TOKENS, OPENROUTER_REASONING_EFFORTS, openrouter_reasoning
+from shared.config import OPENROUTER_REASONING_EFFORT, OPENROUTER_MAX_OUTPUT_TOKENS, OPENROUTER_REASONING_EFFORTS
+from shared.llm_provider import PROVIDERS, LOCAL_MODEL_REVISION, default_model, create_client, request_settings
 from nutricoach.food_vision.compare import get_available_methods
-from nutricoach.food_vision.rf_detr_analyzer import DEFAULT_MODEL_PATH
 from nutricoach.food_vision.supervised_analyzers import TARGETS, RGB_CHECKPOINT, FOOD_R1_MODEL, FOOD_R1_REVISION, validate_regression_split
 
 BASE_URL = "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/"
 FOOD_VISION_DIR = Path(__file__).parent
-METHODS = ("vlm_single", "geometry_vlm_db", "rgb_regression", "food_r1")
-LEGACY_METHODS = ("rf_detr", "clip_ensemble", "rag_vlm", "vlm_db_grounded")
-API_METHODS = {"vlm_single", "geometry_vlm_db", "clip_ensemble", "rag_vlm", "vlm_db_grounded"}
+METHODS = ("vlm_single", "rgb_regression", "food_r1")
+API_METHODS = {"vlm_single"}
 
 
 def digest(path):
@@ -143,10 +142,12 @@ class RequestLimiter:
 
 class APITracker:
     def __init__(self, interval, max_tokens=OPENROUTER_MAX_OUTPUT_TOKENS, reasoning_effort=OPENROUTER_REASONING_EFFORT,
-                 limiter=None):
+                 limiter=None, provider="openrouter", client_options=None):
         self.interval = interval
         self.max_tokens = max_tokens
         self.reasoning_effort = reasoning_effort
+        self.provider = provider
+        self.client_options = client_options or {}
         self.limiter = limiter or RequestLimiter(interval)
         self.calls = []
         self.http_requests = 0
@@ -158,18 +159,17 @@ class APITracker:
 
     def client(self, key):
         import httpx
-        from openai import OpenAI
-        client = OpenAI(
-            api_key=key, base_url="https://openrouter.ai/api/v1", timeout=90,
+        client = create_client(
+            self.provider, key, **self.client_options, timeout=90,
             max_retries=2,
             http_client=httpx.Client(event_hooks={"request": [self.before_request]}),
         )
 
         def create(**kwargs):
-            kwargs["max_tokens"] = self.max_tokens
-            if self.reasoning_effort:
-                kwargs["extra_body"] = {**kwargs.get("extra_body", {}),
-                                        **openrouter_reasoning(self.reasoning_effort)}
+            token_field = "max_completion_tokens" if self.provider == "groq" else "max_tokens"
+            kwargs.pop("max_tokens" if token_field == "max_completion_tokens" else "max_completion_tokens", None)
+            kwargs[token_field] = self.max_tokens
+            kwargs.update(request_settings(self.provider, self.reasoning_effort))
             try:
                 completion = client.chat.completions.create(**kwargs)
             except Exception as exc:
@@ -289,21 +289,28 @@ def run_evaluation(args, manifest):
     workers = getattr(args, "workers", 1)
     if workers < 1:
         raise ValueError("workers must be positive")
-    if set(args.methods) & API_METHODS and not os.getenv("OPENROUTER_API_KEY"):
-        raise ValueError("OPENROUTER_API_KEY required for API-based methods")
+    provider = getattr(args, "provider", "openrouter")
+    if set(args.methods) & API_METHODS and provider != "local" and not os.getenv(f"{provider.upper()}_API_KEY"):
+        raise ValueError(f"{provider.upper()}_API_KEY required for API-based methods")
+    if provider == "local" and workers != 1:
+        raise ValueError("Local VLM evaluation requires --workers 1")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     signature = {"manifest_sha256": digest(args.data_dir / "manifest.json"), "model": args.model,
                  "max_output_tokens": args.max_output_tokens, "reasoning_effort": args.reasoning_effort,
                  "workers": workers, "request_interval": args.request_interval,
                  "shared_config_sha256": digest(FOOD_VISION_DIR.parents[1] / "shared/config.py"),
-                 "rf_detr_checkpoint_sha256": digest(DEFAULT_MODEL_PATH) if "rf_detr" in args.methods else None,
-                 "rf_detr_labels_sha256": digest(DEFAULT_MODEL_PATH.parent / "food_classes.json") if "rf_detr" in args.methods else None,
                  "rgb_checkpoint_sha256": digest(getattr(args, "rgb_checkpoint", RGB_CHECKPOINT)) if "rgb_regression" in args.methods else None,
                  "food_r1": {"model": FOOD_R1_MODEL, "revision": FOOD_R1_REVISION,
                              "max_new_tokens": 512, "do_sample": False, "max_image_side": 1024} if "food_r1" in args.methods else None,
                  "device": getattr(args, "device", None),
                  "code_sha256": {name: digest(FOOD_VISION_DIR / name) for name in
-                                  ("rf_detr_analyzer.py", "vlm_analyzer.py", "clip_analyzer.py", "rag_vlm_analyzer.py", "grounded_vlm_analyzer.py", "geometry_analyzer.py", "supervised_analyzers.py", "nutrition_db.py", "base.py", "evaluate_nutrition5k.py")}}
+                                  ("vlm_analyzer.py", "supervised_analyzers.py", "nutrition_db.py", "base.py", "evaluate_nutrition5k.py")}}
+    signature.update(provider=provider,
+                     local_model_revision=LOCAL_MODEL_REVISION if provider == "local" else None,
+                     local_quantization=getattr(args, "local_quantization", "none") if provider == "local" else None,
+                     local_generation={"do_sample": False, "max_image_side": 1024} if provider == "local" else None,
+                     provider_code_sha256={name: digest(FOOD_VISION_DIR.parents[1] / "shared" / name)
+                                           for name in ("llm_provider.py", "local_qwen.py")})
     signature_path = args.output_dir / "configuration.json"
     if signature_path.exists() and json.loads(signature_path.read_text()) != signature:
         raise ValueError("Output configuration differs; use another output directory")
@@ -326,44 +333,27 @@ def run_evaluation(args, manifest):
                for dish in manifest["dish_ids"]):
             continue
         local = threading.local()
-        shared_clip = None
-        shared_geometry = None
-        classification_lock = threading.Lock()
-        if method == "clip_ensemble":
-            started = time.perf_counter()
-            shared_clip = classes[method](llm_model=args.model, reasoning_effort=args.reasoning_effort)
-            shared_clip._load_clip()
-            initialization[method] = initialization.get(method, 0.0) + time.perf_counter() - started
-        if method == "geometry_vlm_db":
-            from nutricoach.food_vision.geometry_analyzer import RGBGeometryEstimator
-            shared_geometry = RGBGeometryEstimator()
-
-        def classify(image_path):
-            with classification_lock:
-                return shared_clip._classify_food(image_path)
-
         def predict(dish):
             initialization_seconds = 0.0
             if not hasattr(local, "analyzer"):
                 started = time.perf_counter()
                 local.tracker = APITracker(args.request_interval, args.max_output_tokens, args.reasoning_effort,
-                                           limiter=limiter)
+                                           limiter=limiter, provider=provider,
+                                           client_options={"model": args.model, "device": getattr(args, "device", None),
+                                                           "quantization": getattr(args, "local_quantization", "none")})
                 local.analyzer = classes[method](**({"checkpoint": getattr(args, "rgb_checkpoint", RGB_CHECKPOINT),
                                                      "device": getattr(args, "device", None)} if method == "rgb_regression" else
                                                     {"device": getattr(args, "device", None)} if method == "food_r1" else
-                                                    {} if method == "rf_detr" else
-                                                    {"llm_model": args.model, "reasoning_effort": args.reasoning_effort}
-                                                    if method == "clip_ensemble" else
-                                                    {"model": args.model, "reasoning_effort": args.reasoning_effort}))
-                if method in ("rf_detr", "rgb_regression", "food_r1"):
+                                                    {"model": args.model, "reasoning_effort": args.reasoning_effort,
+                                                     "provider": provider, "device": getattr(args, "device", None),
+                                                     "quantization": getattr(args, "local_quantization", "none")}))
+                if method in ("rgb_regression", "food_r1"):
                     local.analyzer._load_model()
-                elif method == "clip_ensemble":
-                    local.analyzer._classify_food = classify
-                    local.analyzer._refinement_client = local.tracker.client(os.environ["OPENROUTER_API_KEY"])
                 else:
-                    local.analyzer._client = local.tracker.client(os.environ["OPENROUTER_API_KEY"])
-                    if shared_geometry is not None:
-                        local.analyzer.geometry_estimator = shared_geometry
+                    local.analyzer._client = local.tracker.client(os.getenv(f"{provider.upper()}_API_KEY", ""))
+                    if provider == "local":
+                        create_client(provider, model=args.model, device=getattr(args, "device", None),
+                                      quantization=getattr(args, "local_quantization", "none")).load()
                 initialization_seconds = time.perf_counter() - started
             tracker, analyzer = local.tracker, local.analyzer
             before, calls_before = tracker.http_requests, len(tracker.calls)
@@ -398,7 +388,7 @@ def run_evaluation(args, manifest):
     summary["nutrient_comparisons"] = nutrient_comparisons(records, manifest, args.seed)
     summary.update(configuration=signature, initialization_seconds=initialization,
                    finished_utc=datetime.now(timezone.utc).isoformat(),
-                   caveats=["50-dish pilot; overhead RGB subset only", "Serving priors are not visual mass estimates",
+                   caveats=[f"{len(manifest['dish_ids'])}-dish evaluation; overhead RGB subset only",
                             "Success-only errors must be read alongside failures", "No ingredient recognition scoring"])
     write_json(args.output_dir / "summary.json", summary)
     print(json.dumps(summary["methods"], indent=2), flush=True)
@@ -406,22 +396,27 @@ def run_evaluation(args, manifest):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--count", type=int, default=50)
+    parser.add_argument("--count", type=int, default=500)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--model", default=os.getenv("OPENROUTER_MODEL_ID", OPENROUTER_MODEL_ID))
-    parser.add_argument("--methods", nargs="+", choices=METHODS + LEGACY_METHODS, default=list(METHODS))
+    parser.add_argument("--provider", choices=PROVIDERS, default="openrouter")
+    parser.add_argument("--model")
+    parser.add_argument("--local-quantization", choices=("none", "4bit"), default="none")
+    parser.add_argument("--methods", nargs="+", choices=METHODS, default=list(METHODS))
     parser.add_argument("--rgb-checkpoint", type=Path, default=RGB_CHECKPOINT)
     parser.add_argument("--device", help="Local inference device, e.g. cpu or cuda:0")
     parser.add_argument("--request-interval", type=float, default=3.2)
     parser.add_argument("--workers", type=int, default=1,
                         help="Parallel API predictions with a global request interval; local inference is serialized")
     parser.add_argument("--max-output-tokens", type=int, default=OPENROUTER_MAX_OUTPUT_TOKENS)
-    parser.add_argument("--reasoning-effort", choices=OPENROUTER_REASONING_EFFORTS, default=OPENROUTER_REASONING_EFFORT)
-    parser.add_argument("--data-dir", type=Path, default=FOOD_VISION_DIR / "data" / "nutrition5k_50")
+    parser.add_argument("--reasoning-effort", choices=("none", *OPENROUTER_REASONING_EFFORTS))
+    parser.add_argument("--data-dir", type=Path, default=FOOD_VISION_DIR / "data" / "nutrition5k_500")
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--retry-errors", action="store_true")
     args = parser.parse_args()
+    args.model = args.model or default_model(args.provider)
+    args.reasoning_effort = args.reasoning_effort or ("none" if args.provider == "local" else OPENROUTER_REASONING_EFFORT)
+    request_settings(args.provider, args.reasoning_effort)
     if args.output_dir is None:
         args.output_dir = FOOD_VISION_DIR / "results" / f"nutrition5k_{args.count}_{args.reasoning_effort}_reasoning"
     manifest = prepare_dataset(args.data_dir, args.count, args.seed)

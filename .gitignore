@@ -41,3 +41,12 @@ nut_agent/nutricoach/food_vision/data/
 nut_agent/nutricoach/food_vision/nutrition5k_*.json
 !nut_agent/nutricoach/food_vision/nutrition5k_500_qwen_results.json
 wandb/
+split-repos/
+
+# Legacy workspace files retained locally after extraction
+ml_pipeline/
+nut_agent/
+ai_content_detector/
+requirements*.in
+requirements*.txt
+.gitmodules

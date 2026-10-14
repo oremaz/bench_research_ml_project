@@ -1,20 +1,20 @@
 # CLAUDE.md
 
-You are a senior machine learning research engineer. This repository combines tabular and multimodal ML pipelines, nutrition applications, and AI-generated content detection and evasion research.
+You are a senior machine learning research engineer. This repository indexes independent projects for tabular and multimodal ML pipelines, nutrition applications, and AI-generated content detection and evasion research.
 
 ## Project structure
 
-* `ml_pipeline/` contains reusable training, augmentation, benchmarking, and checkpoint utilities.
-* `nut_agent/` contains the NutriCoach and Recipe Lab Streamlit applications.
-* `ai_content_detector/` contains text and image detectors, adversarial-evasion research, and a Streamlit scoring application.
-* Read the README in the relevant subproject before changing it. Keep shared functionality in the existing common modules rather than duplicating it across subprojects.
+* This repository is a portfolio index. Active code lives in `oremaz/ml-playground`, `oremaz/nutricoach`, and `oremaz/ai-content-robustness`.
+* On the research VM, their independent local checkouts are under `split-repos/`, which is ignored by this repository.
+* ML Playground provides the installable `ml_pipeline` package used by both applications. Keep generic utilities there rather than duplicating them.
+* Original workspace folders remain locally available but are no longer tracked by this index. Read the relevant independent project's README before changing code.
 
 ## Environment
 
 * Experiments run on a remote VM; local visibility may be incomplete.
 * Do not assume missing files, datasets, checkpoints, or logs mean they do not exist.
-* Use the `uv` environment in this repo. Dependency files live at the repository root.
-* Run smoke tests from the repo root with `PYTHONPATH=.`.
+* Use the `uv` environment in the relevant independent project. Its dependency files live at its repository root.
+* Run smoke tests from the relevant project root with `PYTHONPATH=.`.
 
 Example:
 
@@ -59,7 +59,7 @@ Maintain mathematical rigor with a pedagogical approach. Define notation locally
 
 ## Validation
 
-* Run the narrowest relevant tests first with `PYTHONPATH=. uv run python -m pytest ...` from the repository root.
+* Run the narrowest relevant tests first with `PYTHONPATH=. uv run python -m pytest ...` from the relevant project root.
 * Expand testing when a change affects shared modules or multiple subprojects.
 * Do not update test counts in documentation unless they were verified in the current checkout.
 * Streamlit applications should at least pass import or startup smoke checks when their dependencies and resources are locally available.

@@ -116,22 +116,77 @@ def test_malformed_local_tool_calls_are_rejected(text):
         parse_tool_calls(text, TOOLS)
 
 
-def test_streamlit_provider_switch_updates_chat_and_vision_models(monkeypatch):
+def test_streamlit_provider_switch_updates_chat_model(monkeypatch):
     from nutricoach import app
+    monkeypatch.delenv("OPENROUTER_MODEL_ID", raising=False)
     monkeypatch.setattr(app, "build_nutricoach_graph", MagicMock())
     at = AppTest.from_string(
         'from nutricoach import app\napp.initialize_session_state()\napp.display_llm_settings()', default_timeout=15
     ).run(timeout=15)
     assert not at.exception
     assert at.selectbox(key="llm_provider").value == "openrouter"
+    assert at.text_input(key="chat_model_id").value == "openrouter/free"
     at.selectbox(key="llm_provider").set_value("groq").run()
     assert not at.exception
     assert at.session_state["chat_model_id"] == "qwen/qwen3.8-27b"
-    assert at.session_state["vision_model_id"] == "qwen/qwen3.8-27b"
     assert at.text_input(key="groq_api_key")
     at.selectbox(key="llm_provider").set_value("local").run()
     assert not at.exception
     assert at.session_state["chat_model_id"] == LOCAL_MODEL_ID
-    assert at.session_state["vision_model_id"] == LOCAL_MODEL_ID
     assert at.session_state["reasoning_effort"] == "none"
     assert all("API Key" not in item.label for item in at.text_input)
+    at.selectbox(key="llm_provider").set_value("openrouter").run()
+    assert not at.exception
+    assert at.text_input(key="chat_model_id").value == "openrouter/free"
+
+
+@pytest.mark.parametrize("saved_model", ["", "   ", "dots-studio/dots-3-note-preview:free"])
+def test_streamlit_model_is_visible_on_entry(monkeypatch, saved_model):
+    monkeypatch.setenv("OPENROUTER_MODEL_ID", "")
+    at = AppTest.from_string(
+        'from nutricoach import app\napp.initialize_session_state()\napp.display_llm_settings()', default_timeout=15
+    )
+    at.session_state["chat_model_id"] = saved_model
+    at.run(timeout=15)
+    assert not at.exception
+    assert at.text_input(key="chat_model_id").value == "openrouter/free"
+
+
+@pytest.mark.parametrize("configured_in_env", [True, False])
+def test_streamlit_key_display_and_agent_credentials(monkeypatch, configured_in_env):
+    from nutricoach import app
+    builder = MagicMock()
+    monkeypatch.setattr(app, "build_nutricoach_graph", builder)
+    if configured_in_env:
+        monkeypatch.setenv("OPENROUTER_API_KEY", "environment-test-key")
+    else:
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    at = AppTest.from_string(
+        'from nutricoach import app\napp.initialize_session_state()\napp.display_llm_settings()\napp.init_agent()',
+        default_timeout=15,
+    ).run(timeout=15)
+    assert not at.exception
+    if configured_in_env:
+        field = next(item for item in at.text_input if item.label == "OpenRouter API Key")
+        assert field.disabled
+        assert field.value == "***"
+        expected_key = "environment-test-key"
+    else:
+        assert not at.text_input(key="api_key").disabled
+        builder.assert_not_called()
+        at.text_input(key="api_key").set_value("manual-test-key").run()
+        assert not at.exception
+        expected_key = "manual-test-key"
+    assert builder.call_args.args[0] == expected_key
+    assert not at.warning
+
+
+def test_recipe_lab_renders_as_embedded_tab(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "environment-test-key")
+    monkeypatch.delenv("OPENROUTER_MODEL_ID", raising=False)
+    at = AppTest.from_string('from recipe_lab.app import main\nmain()', default_timeout=15).run()
+    assert not at.exception
+    assert at.subheader[0].value == "Smart Recipe Lab"
+    assert [tab.label for tab in at.tabs] == ["Analyze Recipe", "Compare Recipes"]
+    assert not at.text_input
+    assert at.session_state["model_id"] == "openrouter/free"

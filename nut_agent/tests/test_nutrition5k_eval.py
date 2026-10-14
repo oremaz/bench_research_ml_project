@@ -64,9 +64,10 @@ def test_report_includes_paper_runs_and_rejects_mismatched_manifest(tmp_path):
     report = build_report(manifest_path, [run, cached, quantized])
     assert report["summary"]["methods"]["foodlmm"]["successful"] == 1
     markdown = markdown_report(report)
-    assert "| FoodLMM (16-bit) | 1 / 2 | 0.0" in markdown
-    assert "| FoodLMM (4-bit decoder) | 1 / 2 | 10.0" in markdown
-    assert "| FoodLMM (16-bit, cached) | 1 / 2 | 5.0" in markdown
+    assert "Successes /" not in markdown
+    assert "| FoodLMM (16-bit) | 0.0" in markdown
+    assert "| FoodLMM (4-bit decoder) | 10.0" in markdown
+    assert "| FoodLMM (16-bit, cached) | 5.0" in markdown
     assert "| foodlmm | 1 | -50.0 | [-50.0, -50.0] |" in markdown
     assert "| calories | 1 | 5.00 | [5.00, 5.00] |" in markdown
     assert "| foodlmm_4bit | cuda | 2.00 | 5.00 | 6.00 | 7.00 | 8.00 |" in markdown
@@ -213,6 +214,8 @@ def test_request_limiter_is_shared_by_trackers(monkeypatch):
 @pytest.mark.parametrize("filename", ["nutrition5k_test50_results.json", "nutrition5k_test50_high_results.json"])
 def test_published_snapshot_metrics_match_predictions(filename):
     path = Path(__file__).parent.parent / "nutricoach/food_vision" / filename
+    if not path.is_file():
+        pytest.skip("Local benchmark snapshot is not available")
     snapshot = json.loads(path.read_text())
     manifest = snapshot["manifest"]
     assert len(set(manifest["dish_ids"])) == 50
@@ -231,6 +234,8 @@ def test_high_snapshot_preserves_low_and_paired_comparisons():
 
     directory = Path(__file__).parent.parent / "nutricoach/food_vision"
     low_path = directory / "nutrition5k_test50_results.json"
+    if not low_path.is_file() or not (directory / "nutrition5k_test50_high_results.json").is_file():
+        pytest.skip("Local benchmark snapshots are not available")
     low = json.loads(low_path.read_text())
     high = json.loads((directory / "nutrition5k_test50_high_results.json").read_text())
     assert hashlib.sha256(low_path.read_bytes()).hexdigest() == high["low_snapshot_sha256"]

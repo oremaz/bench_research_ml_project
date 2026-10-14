@@ -1,9 +1,10 @@
 # NutriCoach & Recipe Lab
 
-Two Streamlit applications exploring how LLM agents, local classifiers, and
+A Streamlit application exploring how LLM agents, local classifiers, and
 vision models can support nutrition tracking and recipe analysis. NutriCoach
-keeps a user profile and journal; Recipe Lab analyzes recipes without an account.
-Both are experimental applications, and their nutrition outputs are estimates.
+keeps a user profile and journal; its Recipe Lab tab analyzes recipes within the
+same user session.
+NutriCoach and its Recipe Lab tab are experimental; their nutrition outputs are estimates.
 
 ## NutriCoach
 
@@ -19,34 +20,29 @@ Structured profiles and journals are stored as per-user JSON files, while
 LangGraph's SQLite checkpointer persists conversation state. Each LLM call uses
 structured user context and a bounded recent conversation history.
 
-Users can also upload a food photo to estimate foods, portions, calories, and
-macros. NutriCoach uses only **Single-shot VLM** (`vlm_single`): one OpenRouter
-image call supplies food names, estimated grams, and nutrients. Users can edit
-the dish name and quantities, add or remove ingredients, and review recalculated
-totals before explicitly saving the meal. New or renamed ingredients need a
-database match or manually entered per-100g values. The default model is
-`dots-studio/dots-3-note-preview:free`.
+Users can also upload a food photo to estimate meal mass, calories, and
+macros using **FoodLMM (4-bit)** (`foodlmm_4bit`, default) or **DPF (reproduction)**
+(`dpf_reproduction`), selected in the Food Analysis tab. Both run locally without an
+API key and estimating whole-dish mass and nutrients. The app adapter returns
+whole-dish totals. The first analysis downloads the pinned release
+and model weights, then saves a packed 4-bit checkpoint for future starts;
+subsequent photos reuse the loaded model. DPF uses the existing RGB and predicted-depth
+research adapter in the main environment and caches its loaded model. Switching
+methods clears the previous photo result and reruns the page so the photo UI
+stays inside its Food Analysis tab. Automatic device
+selection uses CUDA, then Apple Silicon MPS, then CPU. FoodLMM uses a persistent
+worker in its isolated environment; see [FoodLMM setup](nutricoach/food_vision/README.md#foodlmm-in-nutricoach).
+Users can edit the dish name and quantities, add or remove ingredients, and review
+recalculated totals before explicitly saving the meal. New or renamed ingredients need a
+database match or manually entered per-100g values.
 
-This choice follows the Nutrition5k pilot runs, which did not establish a clear
-accuracy gain from the extra pipeline steps. The comparison scripts, alternative
-methods, and recorded results remain available for research in
-[Food Vision](nutricoach/food_vision/README.md). Its revised benchmark compares
-single-shot VLM, RGB regression and specialized Food-R1
-on a reproducible 500-dish official-test subset, scoring calories, macros
-and total mass. It also runs the public FoodLMM author checkpoint and a separately
-labeled third-party DPF reproduction. FoodLMM has separate 16-bit and 4-bit
-decoder benchmark rows, with CUDA/MPS device selection in its isolated runner.
-The original 16-bit row is retained alongside a cached 16-bit control for matched
-precision comparisons.
-MPS requires validation on Apple hardware. The four older RF-DETR, CLIP, RAG and
-standalone database-grounded pipelines and the geometry hybrid have been removed. Current measurements,
-H100 jobs and unavailable paper systems are documented in Food Vision; the
-50-dish reports remain historical pilot results.
+The [Food Vision README](nutricoach/food_vision/README.md) describes each benchmark
+method, its training data, the evaluation protocol and the result reports.
 
 ## Recipe Lab
 
 Enter a recipe description to analyze it, or compare two recipes side by side.
-Recipe Lab is available as a standalone app and as a tab inside NutriCoach.
+Recipe Lab is available only as a tab inside NutriCoach.
 It does not maintain a nutrition journal or conversation history.
 
 Classification runs locally using frozen
@@ -74,7 +70,7 @@ Recipe benchmark code lives in
 Historical BGE results do not validate the current LFM2.5 classifiers, and recipe
 classification scores do not measure nutrition estimation accuracy.
 
-## Running the apps
+## Running the app
 
 Use the repository's `uv` environment and root dependency files
 (`requirements.txt`, or `requirements-mac.txt` on macOS). On macOS, LightGBM
@@ -85,36 +81,38 @@ Run from the repository root:
 ```bash
 # NutriCoach, including the Recipe Lab tab
 PYTHONPATH=. uv run streamlit run nut_agent/nutricoach/app.py
-
-# Standalone Recipe Lab
-PYTHONPATH=. uv run streamlit run nut_agent/recipe_lab/app.py
 ```
 
 The sidebar's **Model provider** selects **OpenRouter**, **Groq**, or
-**Local (Qwen)** for NutriCoach chat and food photos. OpenRouter is the default.
+**Local (Qwen)** for NutriCoach chat. OpenRouter is the default, using
+`openrouter/free`.
 Set `OPENROUTER_API_KEY` or `GROQ_API_KEY`, or enter the selected provider's key
-in the sidebar. Keys are separate. Local inference needs no API key and runs
+in the sidebar. When `OPENROUTER_API_KEY` is set, NutriCoach and its Recipe Lab tab
+use it directly and show a disabled `***` field instead of asking
+for the key. Keys are separate. Local inference needs no API key and runs
 `Qwen/Qwen3.8-27B` through Transformers in the Streamlit process.
-Chat and vision model IDs remain separately editable. `OPENROUTER_MODEL_ID`,
+The chat model ID remains editable. `OPENROUTER_MODEL_ID`,
 `GROQ_MODEL_ID`, and `LOCAL_MODEL_ID` override provider defaults.
-Choose image-capable models for photos. Provider switches reset both model IDs
-and reasoning settings to compatible defaults and rebuild the chat agent.
+Provider switches reset the chat model ID and reasoning settings to compatible
+defaults and rebuild the chat agent.
 Reasoning defaults to `high` for hosted providers and `none` locally;
 the menu exposes each backend's supported levels. Local generation is greedy.
-Responses have an 8,192-token budget. Hosted chat/photos go to the selected
-provider; local inputs remain on the machine running Streamlit.
+Responses have an 8,192-token budget. Hosted chat goes to the selected
+provider; food photos use the selected local analysis method, independently of chat settings.
 Local **BF16** needs roughly 58 GB just for weights plus working memory;
 **4-bit (CUDA)** needs `bitsandbytes` from the root GPU dependencies and reduces
 GPU memory use. BF16 is the default and the precision used for the H100 benchmark;
 4-bit is an optional memory-saving setting whose accuracy needs separate evaluation.
-This does not establish compatibility with a 32 GB CPU-only
-machine. The H100 smoke test measured 18.52 GiB peak reserved GPU memory in
-4-bit mode, but 52.12 GiB peak host RSS during loading.
+Loading can also require substantial host RAM; GPU allocation alone does not
+establish compatibility with a machine having 32 GB of total memory.
 `LOCAL_LLM_DEVICE` can select an explicit local device.
 See [Food Vision setup and benchmark commands](nutricoach/food_vision/README.md).
 Recipe Lab retains its existing OpenRouter configuration.
-Local user data and model caches live under `nut_agent/secrets/`, which is
-excluded from version control.
+The environment variable must be available in the terminal or service that
+launches Streamlit. When it is absent, the entered sidebar key is used.
+Local user data and Recipe Lab caches live under `nut_agent/secrets/`, which is
+excluded from version control. Model release code is cached in Food Vision's
+gitignored `data/paper_releases/`; its weights use the Hugging Face cache.
 
 ## Code and tests
 
@@ -133,14 +131,3 @@ PYTHONPATH=. uv run python -m pytest nut_agent/tests/ -q \
 
 The separate GPU and live OpenRouter test modules exercise model inference and
 API integration when their required resources are available.
-On 2026-10-12 the complete NutriCoach suite passed on H100 with **192 passed and
-12 skipped**, including real local Qwen photo and chat tool inference; this
-historical suite also included the subsequently removed geometry tests.
-The separate 4-bit memory test also passed. See
-[local Qwen validation](nutricoach/food_vision/qwen_local_validation.md) for resource
-measurements and skipped checks, and
-[Qwen benchmark results](nutricoach/food_vision/nutrition5k_500_qwen_results.md)
-for the completed 500-dish one-shot baseline and five remaining methods.
-After geometry removal, the current NutriCoach suite passed with **171 passed
-and 7 skipped**, excluding live hosted and GPU integration modules. Streamlit
-checks passed; real GPU inference was not rerun for this deletion.

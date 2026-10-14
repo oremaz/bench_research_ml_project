@@ -56,7 +56,7 @@ Guidelines:
 - When asked about progress or trends, use the get_progress_summary tool.
 - For an end-of-week review, use generate_weekly_summary.
 - When nutrition targets are needed, use calculate_personalized_nutrition_targets.
-- When the user shares a food photo, use the analyze_food_image tool, which uses Single-shot VLM.
+- When the user shares a food photo, use the analyze_food_image tool, which uses local DPF whole-dish nutrition estimates.
 - After the user accepts a meal plan, save it with save_meal_plan. Use get_meal_plan
   to check today's planned meals or to build a grocery list from the plan.
 - Food photo values are estimates. Do not log a photo analysis unless the user explicitly asks to log it.

@@ -73,7 +73,7 @@ class TestBuildGraph:
         from nutricoach.agent import build_nutricoach_graph
         graph = build_nutricoach_graph("fake-api-key", "testuser")
         assert graph is not None
-        mock_llm_cls.assert_called_once_with(model="dots-studio/dots-3-note-preview:free", api_key="fake-api-key", base_url="https://openrouter.ai/api/v1",
+        mock_llm_cls.assert_called_once_with(model="openrouter/free", api_key="fake-api-key", base_url="https://openrouter.ai/api/v1",
                                              extra_body={"reasoning": {"effort": "high"}}, max_tokens=8192)
 
     @patch("nutricoach.agent._get_checkpointer", return_value=None)
@@ -103,7 +103,7 @@ class TestBuildGraph:
         from nutricoach.agent import build_nutricoach_graph
         build_nutricoach_graph("fake-api-key", "testuser")
 
-        mock_llm_cls.assert_called_once_with(model="dots-studio/dots-3-note-preview:free", api_key="fake-api-key", base_url="https://openrouter.ai/api/v1",
+        mock_llm_cls.assert_called_once_with(model="openrouter/free", api_key="fake-api-key", base_url="https://openrouter.ai/api/v1",
                                              extra_body={"reasoning": {"effort": "high"}}, max_tokens=8192)
         mock_llm.bind_tools.assert_called_once()
         tools_arg = mock_llm.bind_tools.call_args[0][0]
@@ -181,16 +181,15 @@ def test_tool_node_isolates_users(tmp_path, monkeypatch):
 
 def test_photo_estimate_is_logged_only_on_request(tmp_path, monkeypatch):
     monkeypatch.setattr("nutricoach.tools.SECRETS_DIR", tmp_path)
-    result = FoodAnalysisResult(method="vlm_single", food_items=[FoodItem("rice", 100, calories=130)])
+    result = FoodAnalysisResult(method="foodlmm_4bit", food_items=[FoodItem("Whole dish", 100, calories=130)])
     result.compute_totals()
-    with patch("nutricoach.food_vision.vlm_analyzer.VLMAnalyzerSingleShot") as analyzer:
+    with patch("nutricoach.food_vision.foodlmm_analyzer.get_foodlmm_analyzer") as analyzer:
         analyzer.return_value.analyze.return_value = result
         image = tmp_path / "meal.jpg"
         image.write_bytes(b"image")
-        config = {"configurable": {"username": "alice", "openrouter_api_key": "vision-key", "vision_model_id": "test/vision"}}
+        config = {"configurable": {"username": "alice"}}
         analyze_food_image.invoke({"image_path": str(image)}, config=config)
-        analyzer.assert_called_with(api_key="vision-key", model="test/vision", reasoning_effort="high",
-                                    provider="openrouter", device=None, quantization="none")
+        analyzer.assert_called_with()
         from shared.memory import MemoryManager
         memory = MemoryManager("alice", tmp_path)
         assert memory.load_todays_log() is None

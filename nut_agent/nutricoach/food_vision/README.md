@@ -1,534 +1,310 @@
 # Food Vision
 
-NutriCoach uses **Single-shot VLM** with OpenRouter and
-`dots-studio/dots-3-note-preview:free` by default. The sidebar's **Model provider**
-selects OpenRouter, Groq, or local `Qwen/Qwen3.8-27B` for photos and NutriCoach chat.
-Groq defaults to `qwen/qwen3.8-27b` and uses a separate `GROQ_API_KEY`.
-Local inference needs no API key. The Food Analysis tab lets users edit the meal name, change grams,
-and add or delete ingredients before saving the reviewed meal. Nutrients update
-without another model call. Renamed or new ingredients require an explicit local
-database entry or manually entered per-100g values. Saving is explicit and the
-review freezes after saving to prevent a second submission of the same draft.
-The LangGraph photo tool follows the same provider selection; journal logging is opt-in.
+This benchmark compares five approaches for estimating whole-dish calories,
+mass, fat, carbohydrate and protein from one RGB photo. It measures performance
+on Nutrition5k; accuracy on web or phone photos requires a separate evaluation.
 
-## Local Qwen and hosted providers
+Every method is scored on the same **five targets**: total energy in kcal,
+food mass in grams, and grams of fat, carbohydrate and protein. There are five
+outputs because Nutrition5k provides these five reference quantities and the
+benchmark evaluates each separately.
 
-`shared/llm_provider.py` centralizes provider endpoints, credentials and reasoning
-parameters. Prompts and JSON parsing are shared across providers. Groq uses its
-native `reasoning_effort` and hidden reasoning format; OpenRouter uses its
-`reasoning` object. `none` is available in the provider menu and benchmark CLI.
-See [Groq vision](https://console.groq.com/docs/vision) and
-[Groq reasoning](https://console.groq.com/docs/reasoning) for compatible models.
+## Methods in practice
 
-The [Qwen author model card](https://huggingface.co/Qwen/Qwen3.8-27B) identifies
-a native vision-language model with the Qwen3.5 architecture. Local loading is
-pinned to revision `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` and requires
-Transformers with `Qwen3_5ForConditionalGeneration` support, plus Accelerate.
-The process caches one client, releases earlier weights when switching local
-precision/model, serializes inference, bounds images to 1024 pixels,
-and generates greedily. Local reasoning defaults to disabled; enabled levels
-are `low`, `medium`, and `xhigh`, matching the released chat template.
-The adapter decodes the author's XML tool-call format for the NutriCoach chat.
-Malformed, incomplete, unknown or missing-argument tool calls are rejected.
-Photos are base64-decoded locally and are never sent to a hosted provider.
+### Single-shot VLM (`vlm_single`)
 
-BF16 weights occupy roughly 58 GB before activations and cache. A H100 80 GB is
-the intended full-precision target. Optional 4-bit NF4 loading uses `bitsandbytes`
-on CUDA; 32 GB CPU RAM alone is not enough for the BF16 model. Model downloads
-and caches should be placed on project storage using `HF_HOME` and `UV_CACHE_DIR`.
+1. **Provide the photo and instructions.** The prompt asks a vision-language
+   model (VLM) to identify foods and estimate their portions and nutrients.
+2. **Generate food-level estimates.** The response is a JSON list containing
+   names, grams, calories and macronutrients for each proposed food. The model
+   infers these quantities from the image and its learned nutritional knowledge.
+3. **Aggregate the meal.** The adapter sums the food-level quantities to obtain
+   whole-dish predictions comparable to Nutrition5k's labels. An omitted food
+   also contributes nothing to those totals.
 
-```bash
-export HF_HOME="$PWD/nut_agent/nutricoach/food_vision/data/huggingface"
-export UV_CACHE_DIR="$PWD/nut_agent/nutricoach/food_vision/data/uv_cache"
-PYTHONPATH=. uv run python nut_agent/nutricoach/food_vision/prepare_benchmark_assets.py --local-qwen
+The entire prediction uses one generation request. The same pipeline supports
+hosted OpenRouter/Groq models and local Qwen.
 
-# Same frozen 500-dish manifest, single-shot VLM
-PYTHONPATH=. uv run python nut_agent/nutricoach/food_vision/evaluate_nutrition5k.py \
-    --provider local --model Qwen/Qwen3.8-27B --device cuda \
-    --methods vlm_single --reasoning-effort none --workers 1 \
-    --output-dir nut_agent/nutricoach/food_vision/results/nutrition5k_500_qwen_single
+**Training:** this pipeline uses existing pretrained checkpoints as supplied.
+Implementation: [vlm_analyzer.py](vlm_analyzer.py).
 
-# Groq requires GROQ_API_KEY; no OpenRouter credentials are used
-PYTHONPATH=. uv run python nut_agent/nutricoach/food_vision/evaluate_nutrition5k.py \
-    --provider groq --model qwen/qwen3.8-27b --methods vlm_single \
-    --reasoning-effort none --output-dir nut_agent/nutricoach/food_vision/results/nutrition5k_500_groq
+### RGB regression (`rgb_regression`)
 
-# Run the complete NutriCoach suite and real local Qwen integration tests on H100
-sbatch --account=mbm@h100 --partition=gpu_p6 --constraint=h100 \
-    --qos=qos_gpu_h100-dev --cpus-per-task=24 \
-    --output=nut_agent/nutricoach/food_vision/results/slurm/nutricoach-qwen-%j.log \
-    nut_agent/nutricoach/food_vision/jobs/qwen_local_jean_zay.sbatch all
+1. **Extract visual features.** Frozen DINOv2 ViT-S/14 encodes the photo into a
+   feature vector representing the dish's appearance.
+2. **Predict nutrition.** A ridge regression head trained on these features
+   predicts the five whole-dish targets. Features and targets are standardized
+   during fitting; predictions are converted back to kcal and grams.
 
-# Separate 4-bit image test with a 32 GiB CUDA allocation ceiling
-sbatch --account=mbm@h100 --partition=gpu_p6 --constraint=h100 \
-    --qos=qos_gpu_h100-dev --time=00:30:00 --cpus-per-task=24 \
-    --output=nut_agent/nutricoach/food_vision/results/slurm/nutricoach-qwen-%j.log \
-    nut_agent/nutricoach/food_vision/jobs/qwen_local_jean_zay.sbatch quantized
-```
+**Training:** DINOv2 has self-supervised visual pretraining on
+142 million images; its weights remain frozen here. Only the regression head
+is fitted on **Nutrition5k official training images**. Within this training set,
+images captured on 20% of the acquisition days form the validation set. Grouping
+by day helps keep related scans in the same split. Normalization parameters are
+estimated on the remaining training images; the ridge regularization strength
+is chosen on the validation set. The official test set is reserved for evaluation.
+Sources: [DINOv2](https://github.com/facebookresearch/dinov2),
+[local trainer](train_rgb_regression.py).
 
-Use `--local-quantization 4bit` to evaluate the quantized variant in a separate
-output directory. Provider, revision, quantization, preprocessing and code hashes
-are stored in benchmark configuration; a changed configuration requires a new run.
-Provider changes and removal of geometry change recorded source hashes. Earlier
-Qwen and Dots runs remain measured snapshots; use a new output directory for
-new evaluations. Their saved configurations and original hashes are preserved.
+### Food-R1 (`food_r1`)
 
-Benchmark mode generates `nutrition5k_500_qwen_results.json` and its Markdown
-comparison automatically, using the four completed local research runs and the
-Qwen single-shot baseline. Dots reports remain separate. For longer evaluations, submit
-benchmark mode with the allocation's regular GPU QoS and an appropriate wall time.
+1. **Generate nutrition estimates.** The photo and a whole-dish instruction
+   prompt the specialized Qwen3-VL-8B model to generate the five totals as text.
+2. **Parse the answer.** The adapter extracts the benchmark fields from a fixed
+   answer template and rejects missing, ambiguous or invalid values.
 
-The research benchmark compares five systems, including FoodLMM precision and
-generation variants, on one RGB image per dish:
+**Training sequence: SFT, then GRPO.** The paper describes supervised training
+on **CalorieBench-80K, Food-101, VireoFood-172, Recipe1M, Nutrition5k and
+FoodDialogues**. CalorieBench-80K is curated from MM-Food-100K; a 5K training
+subset includes GPT-4o-generated reasoning examples.
 
-| Method | Implementation | Nutrition and quantity prediction |
-|---|---|---|
-| `vlm_single` | `vlm_analyzer.py` | One selected VLM image call predicts foods, grams and nutrients |
-| `rgb_regression` | `supervised_analyzers.py`, `train_rgb_regression.py` | Frozen DINOv2 ViT-S/14 plus supervised ridge outputs for all five targets |
-| `food_r1` | `supervised_analyzers.py` | Published specialized Qwen3-VL-8B checkpoint, whole-dish nutrition prediction |
-| `foodlmm` | Saved original author-run records | Public FoodLMM-Chat 16-bit checkpoint with ten trained nutrition heads |
-| `foodlmm_cached` | `evaluate_paper_system.py --method foodlmm` | Same 16-bit checkpoint with cached generation and a full-prefix nutrition pass |
-| `foodlmm_4bit` | `evaluate_paper_system.py --method foodlmm --quantization 4bit` | Same checkpoint with 4-bit decoder weights and floating-point nutrition heads |
-| `dpf_reproduction` | `evaluate_paper_system.py` | Third-party Food2K/ResNet101 fusion checkpoint with predicted RGB-only depth |
+**SFT: learn reference responses through next-token prediction.** Each example
+contains an image, a task prompt and a target response. Qwen3-VL-8B is fine-tuned
+with token-level cross-entropy on the response, conditioned on the image, prompt
+and preceding reference tokens. The published SFT script updates the language
+model, vision encoder and multimodal aligner.
 
-These are whole-pipeline comparisons. The selected VLM configures the one-shot
-baseline; the specialized models and RGB backbone use their own weights.
-The RGB baseline trains a lightweight regression head, not the entire backbone.
-No local implementation is presented as an exact reproduction of a paper score.
+For an illustrative meal labelled 250 g and 400 kcal, the response contains
+these values as text. At the prefix `...provides about`, training supervises the
+tokens encoding `400`, followed by `kcal`, and similarly supervises the mass and
+macronutrient fields. This teaches the model to generate nutritional answers
+from image-and-instruction context. Source: [SFT script](https://github.com/hustvl/Food-R1/blob/main/scripts/train_sft_megatron.sh).
 
-## Why a nutrition database alone is insufficient
+**GRPO: optimize sampled answers against task rewards.** Starting from the SFT
+checkpoint, the model samples **eight completions per image/prompt**. Applicable
+reward components are combined with equal weights. GRPO uses each completion's
+reward relative to the group to favour higher-scoring responses and suppress
+lower-scoring ones. The paper also includes a KL penalty relative to a frozen
+SFT reference model. Open-ended recipe, advice and dialogue tasks are excluded
+from this stage.
 
-For every nutrient j, the calculation is `total_j = sum(grams_i * per_100g_ij / 100)`.
-A database improves nutrient composition lookup but does not determine edible
-mass, preparation, or invisible oil and sugar. The earlier RF-DETR pipeline used
-serving priors; whole-image CLIP candidates were not ingredient detections; the
-older RAG pipeline adjusted portions against typical ranges. Those choices do
-not implement a physical portion estimator. Additional segmentation can also
-accumulate quantity errors rather than improve meal totals.
+For CalorieBench-80K, the [published reward code](https://github.com/hustvl/Food-R1/blob/main/foodr1/rewards.py)
+implements:
 
-## Literature and protocol
+| Component | Reward rule |
+|---|---|
+| Ingredients | Jaccard overlap between predicted and reference ingredient sets. Missing or extra names reduce overlap. |
+| Quantities | For matched ingredient names and units, average `2 / (1 + exp(abs(q_pred - q_ref)))`. Exact quantities score 1; larger discrepancies reduce the score. |
+| Total calories | `TotalKcalExactMatchReward`: 1 when parsed kcal equals reference kcal exactly; otherwise 0. A 1 kcal error receives 0 for this component. |
+| Format | Requires a nonempty `<think>` before `<answer>` and the expected answer structure. The score also measures agreement between the declared and listed ingredient counts. |
 
-Full PDFs read for the implementation, release audit and protocol:
+We use the released model for inference. Sources: [full paper and supplement,
+Sections 4.3–5.1 and Table S1](https://arxiv.org/pdf/2606.04986),
+[GRPO script](https://github.com/hustvl/Food-R1/blob/main/scripts/train_grpo_caloriebench80k.sh),
+[checkpoint](https://huggingface.co/zy12123/Food-R1),
+[local adapter](supervised_analyzers.py).
 
-- [Nutrition5k](https://arxiv.org/pdf/2103.03375), including incremental scans,
-  official train/test isolation, direct regression and five nutrient targets.
-- [Food-R1](https://arxiv.org/pdf/2606.04986), including the supplement's whole-dish
-  nutrition format and supervised/RL training details.
-- [Food Portion Estimation: From Pixels to Calories](https://arxiv.org/pdf/2602.05078),
-  including scale ambiguity, occlusion and the volume-to-mass density gap.
-- [DPF-Nutrition](https://arxiv.org/pdf/2310.11702),
-  [FoodLMM with supplement](https://arxiv.org/pdf/2312.14991),
-  [CalorieLLaVA journal paper](https://www.mdpi.com/2072-6643/17/7/1128), and
-  [DietAI24](https://www.nature.com/articles/s43856-025-01159-0.pdf).
+### FoodLMM (`foodlmm`, `foodlmm_cached`, `foodlmm_4bit`)
 
-Food-R1 inference uses the published
-[checkpoint](https://huggingface.co/zy12123/Food-R1), pinned to revision
-`c70e0d6585b1e81923432df46014d6ce32855e3f`. It predicts whole-dish mass,
-calories, fat, carbohydrate and protein in an answer-only format consistent with
-the training task. It receives neither ingredient labels nor measured mass.
-Greedy generation uses 512 new tokens, with the image bounded to 1024 pixels
-before processor resizing. This adapter is not a reproduction of SFT/GRPO training
-or every paper evaluation setting. The approximately 17.5 GB checkpoint needs
-substantial GPU memory; the supplied job targets a GPU with at least 40 GB.
-The paper reports using official dataset splits; we cannot independently audit
-all training data of published or API models.
+1. **Encode the photo with CLIP.** Its visual features supply image information
+   to the LISA/LLaVA 7B language model, alongside the whole-dish instruction.
+2. **Generate markers for the nutritional outputs.** The vocabulary includes
+   dedicated tokens such as `[MASS_TOTAL]` and `[CAL_TOTAL]`. When generating
+   `[MASS_TOTAL]`, the decoder produces a hidden vector conditioned on the photo,
+   instruction and preceding text. The marker identifies this generation step
+   as the one from which to read the mass prediction.
+3. **Read the numerical prediction from a regression head.** The adapter takes
+   that hidden vector, applies a learned projection and passes it to the mass
+   head, which outputs a value in grams. The other markers select the calorie,
+   fat, carbohydrate and protein heads in the same way.
 
-`train_rgb_regression.py` uses the existing shared vision registry for DINOv2.
-It selects overhead images only from official RGB training IDs intersected with
-depth training IDs. Missing public images returning HTTP 404 are explicitly
-excluded and recorded. Validation holds out 20 percent of UTC acquisition days,
-keeping scans of a plate together. Feature/target scaling fits training data only.
-The split groups by acquisition day as a conservative proxy for related scans;
-no independent plate-sequence grouping file is supplied to this trainer.
-Ridge strength is chosen by the mean validation MAE normalized with training-set
-target means. The test subset is never used for selection or fitting.
-The checkpoint includes encoder weights, preprocessing, target ordering, scaling,
-head parameters, train/validation IDs and source/image hashes. The evaluator
-rejects a regression checkpoint whose fitted IDs violate official train/test separation.
+For example, immediately before emitting `[MASS_TOTAL]`, the language model's
+Transformer decoder computes a hidden state `h` from the image, prompt and
+preceding tokens. The language head uses `h` to predict `[MASS_TOTAL]`.
+The adapter retrieves this same `h`, applies the learned projection, and feeds
+the resulting vector to the mass regression head, which computes a continuous
+value in grams, such as **250 g**. A different photo changes `h` and therefore
+the predicted mass. During training, reference
+responses supervise the marker tokens and measured nutritional labels supervise
+the regression heads. A 250 g training dish therefore supplies both a token
+target and a numerical target. The author's alignment uses the hidden state
+that predicts the marker, immediately before the marker in the token sequence.
+See [the author model's token masks and heads](https://github.com/YuehaoYin/FoodLMM/blob/b1c52d8ea94ef19e4801dbb5a13673732bafce27/model/LISA.py).
 
-`evaluate_nutrition5k.py` defaults to 500 dishes with seed 42 from the official RGB/depth
-test-ID intersection and downloads one overhead RGB image each. No real depth,
-reference mass or ingredient metadata is provided to an analyzer. The manifest
-records source and image SHA-256 hashes. Training data is separate.
+Our runner uses the authors' **FoodLMM-Chat** checkpoint and omits its segmentation
+branch to run the whole-dish nutrition task.
 
-For all five targets, reports include MAE, signed error, normalized MAE,
-RMSE, R2 and 2,000 dish-bootstrap MAE intervals. Normalized MAE is MAE divided
-by mean ground truth, not the mean of per-dish percentage errors. Paired MAE
-differences use common successful dishes for each method pair and target.
-Failures and missing dishes are retained, with no fabricated predictions.
-Bootstrap intervals describe sampling variability in this subset, not calibrated
-per-photo prediction uncertainty or repeated-generation variability.
+**Declared training:** supervised adaptation with **LoRA** and trainable task
+heads. Stage 1 combines
+**VIREO Food-172, Recipe1M, Nutrition5k, FoodSeg103 and UECFoodPixComplete**.
+Stage 2 adds **FoodDialogues and FoodReasonSeg**, generated using GPT-4 from
+Nutrition5k and FoodSeg103, alongside the task datasets. Text prediction,
+segmentation and nutrition losses are jointly optimized; the nutrition heads
+learn from absolute errors plus a small squared-error term against dish- and
+ingredient-level labels.
+Sources: [author code and training configs](https://github.com/YuehaoYin/FoodLMM),
+[Chat checkpoint](https://huggingface.co/Yueha0/FoodLMM-Chat).
 
-A post-hoc oracle-mass diagnostic rescales predicted nutrients by
-`reference_mass / predicted_mass` on positive-mass dishes. This helps investigate
-portion versus composition errors. It uses ground truth only during scoring and
-must never be reported as deployable RGB-only performance.
+The three report rows use the same learned checkpoint. `foodlmm` retains the
+original 16-bit run; `foodlmm_cached` generates the response using a KV cache,
+then runs an additional forward pass over the complete sequence to obtain the
+hidden states used by the nutrition heads.
+`foodlmm_4bit` follows the latter
+procedure with Quanto qint4 decoder weights; the visual encoder and nutrition
+heads remain in floating point. Implementation: [evaluate_paper_system.py](evaluate_paper_system.py).
 
-## Current 500-dish evaluation
+### DPF reproduction (`dpf_reproduction`)
 
-See [the 500-dish comparison](nutrition5k_500_results.md) and its
-[recomputable snapshot](nutrition5k_500_results.json). Reports identify partial
-runs by their success counts; errors are retained and metrics use successful
-predictions. All five systems share the same manifest and image hashes.
+1. **Estimate relief with Depth Anything V2.** This frozen model predicts a
+   relative-depth map from the RGB photo. The map adds a cue about visible shape
+   and relief. Its values describe relative depth within the image.
+2. **Combine appearance and relief.** Two network streams encode the RGB image
+   and predicted depth. Their fusion lets nutritional prediction use both
+   food-related appearance and geometric cues.
+3. **Regress the five meal totals.** Heads map the fused representation directly
+   to mass, calories and the three macronutrient quantities, using relationships
+   learned from labelled dishes. Each quantity is a supervised prediction.
 
-H100 development job `814127` completed RGB training and the RGB/Food-R1
-evaluations on 2026-10-09, exit `0:0`, in 13 minutes 27 seconds. Each local
-method completed 500/500 dishes. Job `814967` completed all 500 DPF attempts:
-489 valid predictions and 11 failures with negative nutritional outputs.
-FoodLMM initially stopped before inference on a Python 3.10 hashing
-compatibility error; the corrected job `815020` completed in 13 minutes
-32 seconds with exit `0:0`, with 495 valid predictions and 5 failures out of
-500 attempts. Completed calorie MAEs are 75.8 kcal for RGB, 77.8 for Food-R1,
-49.0 for FoodLMM-Chat and 47.0 for the provisional DPF reproduction, each on
-its successful dishes. These rows are not comparisons on identical success subsets.
-The historical Dots single-shot evaluation used only the explicitly authorized
-free model. On 2026-10-09 OpenRouter returned HTTP 429 `free-models-per-day`,
-with a daily limit of 50 and zero remaining requests. Single-shot saved 49
-attempts (41 valid, 8 failures). No paid fallback or daily resumptions are used.
-The Qwen single-shot baseline subsequently completed all 500 dishes; see
-[its five-method comparison](nutrition5k_500_qwen_results.md).
+DPF learns associations between visual characteristics and nutritional values.
+Its depth input is derived from the same photo and inherits its scale ambiguity.
 
-### Additional paper release coverage
+**Declared training:** a **Food2K-pretrained ResNet-101** backbone is adapted
+for supervised nutrition regression on **Nutrition5k**. The reproduction
+combines the five absolute-error losses through their geometric mean, training
+predictions against known mass and nutrient totals. We load its released weights.
+The complete checkpoint is loaded with `strict=True`, including both backbones
+and the nutrition heads. Separate Food2K initialization is unnecessary for
+inference. The adapter skips the constructor's initialization-only fallback
+message and confirms successful checkpoint loading instead; missing checkpoint
+keys cause loading to fail rather than leave randomly initialized parameters.
+This **third-party reproduction** adapts DPF with a different depth predictor
+and modified fusion.
+Sources: [reproduction and training description](https://github.com/T0MYYY/Nutrition5k/tree/ed37fbefd5582e7963c08c2815761ab4566cd838),
+[checkpoint](https://huggingface.co/T0MYYY/dpf-nutrition),
+[adapter](evaluate_paper_system.py).
+Because this method is not trained on a super big food dataset, a lack of generalisation over web or manual images is observed in practice, despite the good results on Nutrition5k test set.
 
-| Paper system | Release checked | Local status or blocker |
-|---|---|---|
-| FoodLMM | [Author code](https://github.com/YuehaoYin/FoodLMM), [author weights](https://huggingface.co/Yueha0/FoodLMM-Chat) | Evaluated on all 500 dishes in isolated uv Python 3.10 / Transformers 4.31 |
-| DPF-Nutrition | [Third-party reproduction](https://github.com/T0MYYY/Nutrition5k), [weights](https://huggingface.co/T0MYYY/dpf-nutrition) | Evaluated; explicitly not the author model or an exact reproduction |
-| CalorieLLaVA | Full 2025 journal PDF and author publication listings | No released nutrition fine-tuned checkpoint located; generic LLaVA is not substituted |
-| DietAI24 | [Author code](https://github.com/Runz96/DietAI24), full paper | Released config has empty Azure endpoints/keys and requires GPT-4 Turbo/Vision plus text-embedding-3-large; those paid deployments are unavailable |
+## Evaluation and interpretation
 
-FoodLMM uses the published **Chat** checkpoint, not the paper's S1 or
-task-fine-tuned score. The released model is built on LISA/LLaVA 7B with
-CLIP ViT-L/14 and trained nutrition heads; it does not use Qwen.
-Its prompt requests the entire dish; numerical predictions
-come from trained nutrition heads rather than parsing generated numeric guesses.
-Generation is greedy with 256 new tokens and author CLIP preprocessing.
-The nutrition runner omits the unused SAM segmentation branch after the nutrition
-heads. CUDA uses BF16 and MPS uses FP16 for floating-point weights.
-Generation uses a KV cache and an explicit attention mask. One full-prefix
-forward pass then supplies the trained heads with the author's hidden-state
-alignment. This avoids recomputing CLIP and the full decoder at every token.
-The original 16-bit score stays in the report. Precision comparisons use the
-additional cached 16-bit control, so both variants share the generation policy.
+The frozen subset contains **500 dishes**, selected with seed 42 from the
+intersection of Nutrition5k's official RGB and depth test IDs. Each method
+receives one overhead RGB image; measured depth, true mass and ingredient
+annotations are withheld. Source and image hashes identify the shared inputs.
 
-The 500-dish H100 precision job `1006022` completed with exit code `0:0` on
-2026-10-13. The 4-bit run returned valid outputs for 474 dishes; the cached 16-bit
-control succeeded on 496. On 472 common successful dishes, quantization increased
-calorie MAE by 2.00 kcal (dish-bootstrap 95% interval 0.46 to 3.54 kcal).
-All other paired target differences and failures are in the generated reports.
-The separate success-only calorie rows are 47.9 and 49.0 kcal respectively and
-use different dish subsets.
+| Report field | Meaning |
+|---|---|
+| MAE | Mean absolute error; kcal for energy, grams for mass and macros |
+| Normalized MAE | MAE divided by the mean reference value for that target |
+| RMSE / R² | Additional measures of error magnitude and explained variance |
+| Bootstrap interval | Sampling variability across dishes, not uncertainty for an individual photo |
 
-The measured inference peaks were 4.97 GiB allocated / 5.71 GiB reserved for
-4-bit and 13.72 / 13.80 GiB for cached 16-bit. Mean inference was 1.18 and
-0.75 seconds per dish respectively. Quantization saves about 64% of allocated
-inference memory, with slightly worse paired accuracy, slower H100 inference and
-more format failures (26 versus 4). The 4-bit packed file is approximately
-4.3 GiB; its CUDA loading peak is 7.91 GiB allocated and peak host RSS is
-7.42 GiB. These are separate CUDA/host measurements, not a Mac unified-memory
-benchmark. The original 16-bit row remains 495/500 successes and 49.0 kcal MAE.
-Cached 16-bit preserved all 495 original valid predictions exactly and recovered
-the previously missing calorie token on one additional dish.
-All required nutritional tokens and checkpoint parameters must exist.
-The external release commit and model revisions are pinned in the runner.
+Errors use successful predictions only, so rows with different success counts
+can describe different dish subsets. Paired comparisons use common successes.
+The optional oracle-mass diagnostic rescales nutrients using true mass **during
+scoring only**; it is not deployable RGB-only performance.
 
-The DPF reproduction replaces the paper's supervised DPT depth module with
-Depth Anything V2 Small, and modifies attention/fusion. We use its released
-336 x 448 RGB/depth transforms and per-image 16-bit normalized predicted depth.
-Its code selects checkpoints on a validation subset of official training IDs.
-The published weight file contains no fitted dish IDs, so its actual training
-membership cannot be independently audited. The same limitation applies to
-the training membership of published FoodLMM/Food-R1 and API models.
-No measured depth, measured mass or test labels enter inference.
-The DPF publisher's [initial model card](https://huggingface.co/T0MYYY/dpf-nutrition/blob/ea15de307a014ca48922899ab2275578aea6c8ea/README.md)
-also describes an earlier hash-split leakage problem and states it was fixed
-before this release. Without fitted dish IDs we cannot verify that repair in
-the weight file. Its comparison remains provisional, with this provenance
-limitation, rather than an independently validated paper reproduction.
+The locally fitted RGB head has recorded training/validation IDs. External model
+training is described by its publishers: we cannot independently verify the
+complete training membership of the released weights or API models. In
+particular, the DPF publisher reports correcting an earlier split leakage issue,
+but its checkpoint does not contain the fitted dish IDs needed to audit that fix.
+Training on Nutrition5k and evaluating its held-out test split is legitimate;
+using the same dataset name alone does not imply leakage.
 
-## Historical 50-dish pilot
+A single photo leaves scale, hidden ingredients and added oil ambiguous.
+Results on controlled cafeteria images should not be treated as evidence of
+reliable portions on web photos. These adapters and inputs also differ from
+some paper settings; published paper scores are not substituted for our runs.
 
-See [the generated comparison report](nutrition5k_dots_results.md) and
-[recomputable snapshot](nutrition5k_dots_results.json).
-Dots single-shot completed all 50 images with high reasoning, temperature 0.1,
-and an 8,192-token output budget: **97.1 kcal MAE**, **73.8 g mass MAE**,
-**6.5 g fat**, **8.0 g carbohydrate**, **8.2 g protein**.
+## Results
 
-H100 development job `798727` completed successfully on 2026-10-08 in 3 minutes
-30 seconds. RGB regression and Food-R1 each completed all 50 images without
-failures. RGB regression measured **101.4 kcal MAE**, **60.2 g mass MAE**,
-**6.9 g fat**, **7.8 g carbohydrate**, **9.5 g protein**. Food-R1 measured
-**109.2 kcal MAE**, **96.7 g mass MAE**, **6.7 g fat**, **7.0 g carbohydrate**,
-**7.1 g protein**. The report records job details, training provenance and timings.
-
-The removed geometry row in this historical report has no measured score.
-This 50-dish controlled overhead-image pilot is insufficient to establish
-smartphone-photo generalization. Published paper scores are not inserted into
-our local comparison; datasets, splits and available inputs differ.
-
-Historical [low](nutrition5k_test50_results.json) and
-[high](nutrition5k_test50_high_results.json) snapshots are retained with their
-original model metadata. They are not Dots runs and do not enter this comparison.
+[The 500-dish Qwen comparison](nutrition5k_500_qwen_results.md) includes the local
+Qwen single-shot baseline, RGB regression, Food-R1, FoodLMM precision variants
+and DPF. The report generator writes `nutrition5k_500_qwen_results.json` locally
+with predictions, failures and configurations.
 
 ## Run the benchmark
 
-All commands start at the repository root in its `uv` environment.
+From the repository root, use the main `uv` environment for RGB, VLM, Food-R1
+and DPF. FoodLMM requires its separate environment below. Models, releases and
+datasets need internet access on first download; `HF_HOME` selects the model cache.
 
 ```bash
-# Prepare the frozen test images only
 PYTHONPATH=. uv run python nut_agent/nutricoach/food_vision/evaluate_nutrition5k.py --prepare-only
-
-# Train the supervised RGB baseline, using all available official training overheads
 PYTHONPATH=. uv run python nut_agent/nutricoach/food_vision/train_rgb_regression.py --device cuda
-
-# Local models require no OpenRouter key
 PYTHONPATH=. uv run python nut_agent/nutricoach/food_vision/evaluate_nutrition5k.py \
-    --methods rgb_regression food_r1 --device cuda \
-    --output-dir nut_agent/nutricoach/food_vision/results/nutrition5k_500_local
-
-# Run the one-shot baseline, with OPENROUTER_API_KEY set
+    --methods rgb_regression food_r1 --device cuda --output-dir /path/to/local-run
 PYTHONPATH=. uv run python nut_agent/nutricoach/food_vision/evaluate_nutrition5k.py \
-    --methods vlm_single --model dots-studio/dots-3-note-preview:free \
-    --reasoning-effort high --workers 2 --request-interval 3.2 \
-    --output-dir nut_agent/nutricoach/food_vision/results/nutrition5k_500_dots_single
-
-# Regenerate the report as methods finish; select exactly one run per method
+    --methods vlm_single --provider local --model Qwen/Qwen3.8-27B \
+    --reasoning-effort none --workers 1 --device cuda --output-dir /path/to/qwen-run
+PYTHONPATH=. uv run python nut_agent/nutricoach/food_vision/evaluate_paper_system.py \
+    --method dpf_reproduction --device auto --output-dir /path/to/dpf-run
 PYTHONPATH=. uv run python nut_agent/nutricoach/food_vision/report_nutrition5k.py \
-    --run-dir nut_agent/nutricoach/food_vision/results/nutrition5k_500_dots_single \
-              nut_agent/nutricoach/food_vision/results/nutrition5k_500_rgb \
-              nut_agent/nutricoach/food_vision/results/nutrition5k_500_food_r1 \
-              nut_agent/nutricoach/food_vision/results/nutrition5k_500_dpf_reproduction \
-              nut_agent/nutricoach/food_vision/results/nutrition5k_500_foodlmm
+    --model Qwen/Qwen3.8-27B \
+    --run-dir /path/to/qwen-run /path/to/local-run /path/to/dpf-run /path/to/foodlmm-run
 ```
 
-The evaluator defaults to one-shot VLM, RGB regression and Food-R1; the paper
-runner evaluates FoodLMM and the DPF reproduction separately. It saves every dish atomically
-and resumes completed predictions; `--retry-errors` retries failures. Each run
-records configuration, source/checkpoint hashes, API usage and resolved model IDs.
-Use a new output directory after code/configuration changes. API calls share a
-request limiter; persistent configuration failures and daily quota exhaustion stop
-the run. API throttling/retries are included in elapsed time, so recorded latency
-is not a controlled model-speed comparison. Local inference is serialized.
-Data, full responses and checkpoints live in gitignored `data/` and `results/`.
-The compact current snapshot is checked in alongside this README.
+For hosted VLM inference, choose `--provider openrouter` or `groq`, an
+image-capable `--model`, and configure the corresponding API key. Local Qwen
+BF16 needs roughly 58 GB for weights alone; `--local-quantization 4bit` uses
+bitsandbytes on CUDA. Food-R1's checkpoint is roughly 17.5 GB before runtime
+memory. These memory requirements are separate from FoodLMM's quantization.
 
-## Jean Zay
+Runs save predictions incrementally and resume completed dishes; `--retry-errors`
+retries failures. Use a new output directory when code or configuration changes.
+For offline GPU jobs, prepare assets with [prepare_benchmark_assets.py](prepare_benchmark_assets.py)
+and submit [nutrition5k_jean_zay.sbatch](jobs/nutrition5k_jean_zay.sbatch) using
+an account and GPU allocation appropriate to your site.
 
-Set up the repository's GPU `uv` environment on Jean Zay using the root GPU
-dependencies and your site's
-module configuration. It must already contain a CUDA-compatible torch, timm,
-scikit-learn, Pillow and Transformers with Qwen3-VL support.
+## FoodLMM in NutriCoach
 
-On a network-enabled preparation node, with the same shared cache/data paths as
-the compute job, run:
+NutriCoach's Food Analysis tab offers FoodLMM 4-bit (default) and DPF reproduction,
+independently of the chat provider. DPF uses the existing RGB and predicted-depth
+adapter in the main environment, downloads its assets on first use, and reuses
+its loaded model. Switching methods clears the previous result.
+The adapters return whole-dish totals; users can review,
+correct and explicitly save them to the nutrition journal.
 
-```bash
-PYTHONPATH=. uv run python nut_agent/nutricoach/food_vision/prepare_benchmark_assets.py --food-r1
-PYTHONPATH=. uv run python nut_agent/nutricoach/food_vision/train_rgb_regression.py --prepare-only --device cpu
-```
-
-For the two additional paper systems, cache their pinned releases and install
-FoodLMM's older dependencies in an isolated uv environment. DPF uses the main
-repo environment. The Python install directory below keeps assets on project storage.
+FoodLMM runs in an isolated Python 3.10 environment because its Transformers
+version conflicts with the main app. Its worker adds the environment’s executable
+directory to PATH so PyTorch can find Ninja for native extensions. From the repository root:
 
 ```bash
-PYTHONPATH=. uv run python nut_agent/nutricoach/food_vision/prepare_benchmark_assets.py --papers
-export UV_PYTHON_INSTALL_DIR="$PWD/nut_agent/nutricoach/food_vision/data/python"
-uv python install 3.10
 uv venv --python 3.10 nut_agent/nutricoach/food_vision/data/foodlmm_env
-uv pip install --python nut_agent/nutricoach/food_vision/data/foodlmm_env/bin/python \
-    'torch==2.6.0' 'torchvision==0.21.0' --index-url https://download.pytorch.org/whl/cu124
 uv pip install --python nut_agent/nutricoach/food_vision/data/foodlmm_env/bin/python \
     -r requirements_foodlmm.in
 ```
 
+On CUDA, install matching CUDA Torch/Torchvision wheels in that environment.
+The app finds it automatically; `FOODLMM_PYTHON` selects another interpreter
+and `FOODLMM_DEVICE` selects `auto`, `cuda`, `mps` or `cpu`. Auto prefers CUDA,
+then MPS, then CPU. Git and Hugging Face access are needed for initial assets.
+
 ### FoodLMM 4-bit and Apple Silicon
 
-The runner accepts `--device auto`, `cuda`, `cuda:INDEX`, `mps`, or `cpu`.
-`auto` chooses CUDA, then MPS, then CPU. The 4-bit variant uses
-[Quanto](https://github.com/huggingface/optimum-quanto), which supports CUDA and
-MPS. Only decoder linear weights are quantized; CLIP, embeddings, language output
-and trained nutrition heads stay in floating point. No test images or labels are
-used to quantize the weights.
-
-Export the packed checkpoint on a machine with enough memory for the original
-weights, then load that export directly on the target machine:
+The app loads an existing packed export from `data/foodlmm_4bit`, or from
+`FOODLMM_QUANTIZED_CHECKPOINT`. Without one, it loads and quantizes the original
+weights, requiring more loading memory, then automatically saves a packed export
+to `data/foodlmm_4bit` for future starts. The terminal reports loading, export,
+and model readiness. Both export files must be present to reuse the checkpoint.
+FoodLMM prediction uses `torch.no_grad()` to preserve the tensor version counters
+required by Quanto. On MPS, the runner bypasses Quanto 0.2.7's native unpacker
+using tensor operations with the same packed value ordering. The native unpacker
+recompiles Metal shaders and synchronizes the GPU on every call. A small
+quantized MPS linear layer produced matching outputs with the replacement;
+full-model MPS latency remains unvalidated. Generation stops after all five
+whole-dish nutrition tokens appear, or at EOS/the 256-token limit. The full-prefix
+nutrition-head pass is retained; causal states preceding the required tokens do
+not depend on discarded trailing text. Generation and nutrition-head timings
+are reported separately in the terminal. Existing benchmark reports predate this
+early stopping change and have not been rerun. Prepare a packed export on a machine
+with sufficient memory and copy it to the target machine:
 
 ```bash
-food_vision_dir=nut_agent/nutricoach/food_vision
-uv run --python "$food_vision_dir/data/foodlmm_env/bin/python" python "$food_vision_dir/evaluate_paper_system.py" \
+PYTHONPATH=. nut_agent/nutricoach/food_vision/data/foodlmm_env/bin/python \
+    nut_agent/nutricoach/food_vision/evaluate_paper_system.py \
     --method foodlmm --device cuda --quantization 4bit --prepare-only \
-    --export-quantized "$food_vision_dir/data/foodlmm_4bit" \
-    --output-dir "$food_vision_dir/results/foodlmm_4bit_prepare"
-uv run --python "$food_vision_dir/data/foodlmm_env/bin/python" python "$food_vision_dir/evaluate_paper_system.py" \
-    --method foodlmm --device mps --quantization 4bit \
-    --quantized-checkpoint "$food_vision_dir/data/foodlmm_4bit" \
-    --output-dir "$food_vision_dir/results/nutrition5k_500_foodlmm_4bit_mps"
+    --export-quantized nut_agent/nutricoach/food_vision/data/foodlmm_4bit \
+    --output-dir /path/to/foodlmm-prepare
+PYTHONPATH=. nut_agent/nutricoach/food_vision/data/foodlmm_env/bin/python \
+    nut_agent/nutricoach/food_vision/evaluate_paper_system.py \
+    --method foodlmm --device auto --quantization 4bit \
+    --quantized-checkpoint nut_agent/nutricoach/food_vision/data/foodlmm_4bit \
+    --output-dir /path/to/foodlmm-run
 ```
 
-On macOS, install `requirements_foodlmm.in` in the isolated Python 3.10 environment
-without the CUDA wheel index. Xcode command line tools are needed to compile
-Quanto's MPS kernels. Copy the packed checkpoint and pinned FoodLMM code;
-the tokenizer, config and CLIP weights must also be available through Hugging Face
-or its cache. The benchmark additionally needs the frozen manifest and images.
-Restoration builds the decoder on the meta device and assigns packed tensors, so
-it does not allocate the full decoder in floating point first.
-MPS compatibility has not been validated on physical Apple hardware; CUDA memory
-measurements do not establish total unified-memory use or latency on a 16 GB Mac.
-
-Submit the matching H100 comparison with the existing scheduler command and mode
-`foodlmm_precision`. It exports the checkpoint, evaluates all 500 dishes in a
-fresh 4-bit process, then profiles 16-bit FoodLMM and DPF. `resources.json` records
-loading and inference GPU peaks, process peak host RSS, and the number of profiled
-dishes. Device synchronization makes the recorded inference latency meaningful.
-MPS records current allocated and driver memory, not a measured peak.
-
-Rerun Dots on the new 500-dish manifest; the 50-dish baseline does not cover it.
-Cache placement can use `HF_HOME` on shared project storage.
-The job sets Hugging Face offline mode and uses `uv run --offline`.
-From the repository root, choose an allocated account and GPU constraint:
-
-```bash
-sbatch --account=YOURPROJECT@a100 --constraint=a100 \
-    nut_agent/nutricoach/food_vision/jobs/nutrition5k_jean_zay.sbatch all
-# Replace all by rgb, food_r1, foodlmm, dpf_reproduction or papers.
-```
-
-Account, partition and module setup depend on your allocation; see the
-[IDRIS guide](https://www.idris.fr/media/eng/ia/guide_nouvel_utilisateur_ia-eng.pdf).
-The job defaults to one GPU, eight CPU cores and a four-hour limit. The verified
-H100 development submission overrides this to 24 CPU cores and two hours:
-
-```bash
-# Export these same cache paths before preparing assets and submitting.
-export HF_HOME="$PWD/nut_agent/nutricoach/food_vision/data/huggingface"
-export UV_CACHE_DIR="$PWD/nut_agent/nutricoach/food_vision/data/uv_cache"
-mkdir -p nut_agent/nutricoach/food_vision/results/slurm
-PYTHONUNBUFFERED=1 sbatch --account=mbm@h100 --partition=gpu_p6 --constraint=h100 \
-    --qos=qos_gpu_h100-dev --time=02:00:00 --cpus-per-task=24 \
-    --output=nut_agent/nutricoach/food_vision/results/slurm/nutricoach-n5k-%j.log \
-    nut_agent/nutricoach/food_vision/jobs/nutrition5k_jean_zay.sbatch all
-```
-
-Job `798727` was submitted on 2026-10-08 at 20:38 Paris time. Its initial queue
-reason was `QOSGrpGRES`, indicating the development QoS GPU capacity was occupied.
-At 20:40 it was running on `jzxh001`, with CUDA feature encoding confirmed in the log.
-It completed at 20:43:17 Paris time with exit code `0:0`; all 50 dishes succeeded
-for each local method. Total elapsed time was 3 minutes 30 seconds.
-Preparation cached 50 test images, exactly matching the checked-in Dots manifest,
-2,755 training/validation images (three HTTP 404 exclusions), DINOv2 weights and
-the pinned Food-R1 checkpoint. Logs use `results/slurm/nutricoach-n5k-798727.log`;
-method outputs use `results/nutrition5k_50_rgb` and `results/nutrition5k_50_food_r1`.
-Inspect the completed job with `sacct -j 798727`.
-
-API evaluations run separately on a network-enabled host.
-Copy resulting method directories back and
-regenerate the report; it rejects mismatched test manifests and API model IDs.
-
-## Validation in this checkout
-
-For the FoodLMM precision changes, **17 focused tests passed**, followed by
-**176 passed and 4 skipped** across NutriCoach with GPU integration modules
-excluded. The skipped tests require a live OpenRouter key. This includes both
-precision rows, paired comparison signs, resource reporting, device selection and
-Streamlit checks. Small CPU fixtures verified exact BF16 quantized restoration
-and finite FP16 restoration while leaving the output head in floating point.
-These fixtures do not validate actual MPS execution.
-H100 cache checks reproduced all five saved predictions exactly on three dishes
-for each precision. Full 500-dish profiling is tracked in the generated report.
-DPF resource job `1005765` completed on 2026-10-13: all 500 predictions matched
-the previous run exactly, with 0.69 GiB peak allocated GPU memory, 0.82 GiB peak
-reserved memory, 1.34 GiB peak host RSS and 0.10 seconds mean inference latency.
-
-After geometry removal on 2026-10-12, **50 focused tests passed**, followed by
-**171 passed and 7 skipped** across NutriCoach with live hosted and GPU integration
-modules excluded. This includes Streamlit checks and rejection of geometry by
-the remaining method registry. Both current 500-dish JSON/Markdown reports were
-regenerated and verified to contain exactly five methods without geometry.
-Slurm shell syntax and `git diff --check` passed. The earlier H100 counts below
-describe validation before geometry removal; GPU inference was not rerun for
-this deletion.
-
-H100 job `819312` completed on 2026-10-09 with exit `0:0` in 2 minutes 35 seconds:
-**191 tests passed and 11 skipped** across the complete NutriCoach suite,
-including real Qwen single-shot photo inference, geometry inference, chat tool
-execution and the existing recipe GPU embedder tests. Skips cover absent recipe
-checkpoints/model registry resources and live hosted tests without credentials.
-Accelerate 1.12.0 and bitsandbytes 0.50.2 were installed in the existing VM `uv`
-environment. The root Transformers pin and required tokenizer/safetensors pins
-were synchronized with the supported local backend.
-
-On 2026-10-12, all **12 provider tests passed**, including Streamlit provider
-selection, local tool parsing, credential isolation and releasing earlier weights
-when changing local precision. Job `963878` completed the separate 4-bit/32 GiB
-CUDA memory check on 2026-10-12 with **1 test passed** in 5 minutes 32 seconds.
-Real photo inference used a peak of **18.52 GiB reserved GPU memory**, but peak
-host RSS during loading was **52.12 GiB**. This validates a CUDA allocation below
-32 GiB on H100, not a machine with only 32 GB system RAM. Loader/inference elapsed
-time was 305.6 seconds, including initialization; it is not steady-state latency.
-Job `964118` completed the full H100 suite after this memory fix: **192 tests
-passed, 12 skipped**, exit `0:0`, 2 minutes 7 seconds overall. The additional
-skip is the separately validated opt-in quantized memory test.
-Job `964397` reached its eight-hour limit after completing Qwen one-shot on
-**500/500 dishes: 94.7 kcal MAE**. RGB regression and Food-R1 score 75.8 and
-77.8 kcal respectively on the same 500 dishes, beating this baseline. FoodLMM
-scores 49.0 kcal on 495 successful dishes; the provisional third-party DPF
-reproduction scores 47.0 kcal on 489 successful dishes.
-The geometry implementation, preparation option, benchmark registration and
-its dedicated tests were removed on 2026-10-12 at the user's request. Resume
-job `1002790` was cancelled. Current reports exclude geometry; raw predictions
-and earlier validation logs remain historical records.
-See [Qwen benchmark results](nutrition5k_500_qwen_results.md) and
-[local backend validation](qwen_local_validation.md) for measured tests and memory.
-
-On 2026-10-09, 66 focused tests passed across food vision, nutrition matching,
-geometry, official split/evaluation, supervised adapters and agent integration.
-This includes 500-dish selection, paper-report checks and rejection of removed methods.
-All 14 photo-review tests passed, including Streamlit AppTest, after warming
-imports to avoid a three-second startup timeout on the shared filesystem.
-FoodLMM's actual author model class and nutritional tokenizer imported in its
-isolated environment; all DPF checkpoint keys matched the pinned release.
-The full 500-dish RGB, Food-R1, FoodLMM and DPF runs exercised real H100 inference.
-Repeated paper-asset preparation succeeded completely offline.
-
-Jean Zay preflight on 2026-10-08 passed all eight tests in
-`nut_agent/tests/test_supervised_food_vision.py`, an offline Food-R1 processor and
-Qwen3-VL model-class import check, Slurm shell syntax and scheduler submission
-validation. A development allocation confirmed an NVIDIA H100 80 GB.
-Repeated training-data preparation passed offline, and job `798727` began CUDA
-feature encoding successfully.
-The environment uses torch `2.6.0+cu124`, torchvision `0.21.0+cu124`, timm `1.0.9`
-and Transformers `5.17.0`. The full GPU job completed RGB regression training
-and both local 50-dish evaluations successfully; results are recorded above.
-On 2026-10-09, report validation confirmed matching manifests, the checkpoint
-hash and official split isolation, and recomputed metrics matched both saved
-run summaries. All three targeted snapshot/report/comparison tests passed.
-
-On 2026-10-08, all **190 local tests passed**, excluding the live OpenRouter and
-GPU-integration modules. This includes Streamlit AppTest coverage of photo
-editing, add/delete, recalculation, user isolation and single journal submission.
-The macOS run preloaded LightGBM/Torch and limited native threads and joblib to
-one process after a native subprocess crash in an existing stacking test.
-The exact invocation was:
-
-```bash
-LOKY_MAX_CPU_COUNT=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. uv run python -c 'import lightgbm; import torch; torch.set_num_threads(1); import pytest; raise SystemExit(pytest.main(["nut_agent/tests/", "-q", "-p", "no:cacheprovider", "--ignore=nut_agent/tests/test_gpu_pipeline.py", "--ignore=nut_agent/tests/test_openrouter_live.py"]))'
-```
-
-Real smoke checks covered DINOv2 head fitting on 16 official-training dishes,
-checkpoint reload and inference, repeated offline training, the actual Food-R1
-image processor, and pretrained SAM/depth inference. The tiny training run is
-only an execution check and is excluded from the benchmark results.
-Slurm shell syntax and `git diff --check` passed. Full Food-R1 generation and
-full regression training/evaluation subsequently completed in H100 job `798727`.
-
-## Removed pipelines
-
-RF-DETR plus serving priors, CLIP candidates plus VLM, the serving-range RAG
-pipeline and the standalone database-grounded VLM have been deleted with their
-dedicated training/preparation utilities and dependencies. Nutrition matching is
-retained for user corrections in NutriCoach. The geometry hybrid and its tests
-have also been deleted and removed from the active benchmark. Historical raw
-predictions and earlier reports remain archival records.
-The local nutrition table remains a small 130+ food reference table, not full FNDDS.
+The benchmark runner also accepts `--quantization none` for the 16-bit control.
+The app prepares its CLIP assets automatically; the benchmark needs them cached
+first with `prepare_benchmark_assets.py --papers`. On macOS, Quanto's MPS kernels
+require Xcode command line tools. CUDA memory/latency results do not establish
+Apple Silicon performance; real FoodLMM MPS inference remains unvalidated here.

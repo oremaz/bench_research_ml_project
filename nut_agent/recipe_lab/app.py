@@ -1,5 +1,5 @@
 """
-Smart Recipe Lab - Standalone Streamlit app for recipe analysis.
+Smart Recipe Lab - Recipe analysis tab embedded in NutriCoach.
 Stateless, no login required, no LangGraph.
 """
 
@@ -17,7 +17,7 @@ from shared.config import OPENROUTER_MODEL_ID, OPENROUTER_REASONING_EFFORT, OPEN
 
 def get_predictor():
     """Initialize or retrieve the FoodModelPredictor."""
-    api_key = st.session_state.get("api_key") or os.environ.get("OPENROUTER_API_KEY", "")
+    api_key = os.environ.get("OPENROUTER_API_KEY") or st.session_state.get("api_key", "")
     model_id = st.session_state.get("model_id") or OPENROUTER_MODEL_ID
     reasoning_effort = st.session_state.get("reasoning_effort", OPENROUTER_REASONING_EFFORT)
     if reasoning_effort not in OPENROUTER_REASONING_EFFORTS:
@@ -124,26 +124,10 @@ def display_analysis_results(analysis: dict):
         st.info(f"Nutrition estimate unavailable: {nutrients['error']}")
 
 
-def main(embedded: bool = False):
-    if embedded:
-        st.subheader("Smart Recipe Lab")
-    else:
-        st.title("Smart Recipe Lab")
+def main():
+    st.subheader("Smart Recipe Lab")
     st.markdown("Analyze recipes with local classifiers and zero-shot OpenRouter nutrition estimates.")
-
-    if not embedded:
-        with st.sidebar:
-            st.header("Settings")
-            st.selectbox("Reasoning effort", OPENROUTER_REASONING_EFFORTS,
-                         index=OPENROUTER_REASONING_EFFORTS.index(OPENROUTER_REASONING_EFFORT), key="reasoning_effort",
-                         help="Choose a level supported by your OpenRouter model.")
-            api_key = st.text_input("OpenRouter API Key", type="password", value=os.environ.get("OPENROUTER_API_KEY", ""))
-            model_id = st.text_input("OpenRouter model ID", value=os.environ.get("OPENROUTER_MODEL_ID", OPENROUTER_MODEL_ID))
-            st.caption("Default model: [dots-studio/dots-3-note-preview:free](https://openrouter.ai/dots-studio/dots-3-note-preview:free)")
-            st.session_state["api_key"] = api_key or None
-            st.session_state["model_id"] = model_id.strip() or OPENROUTER_MODEL_ID
-    else:
-        st.session_state["model_id"] = st.session_state.get("model_id") or os.environ.get("OPENROUTER_MODEL_ID", OPENROUTER_MODEL_ID)
+    st.session_state["model_id"] = st.session_state.get("model_id") or os.environ.get("OPENROUTER_MODEL_ID") or OPENROUTER_MODEL_ID
 
     # Main tabs
     tab_single, tab_compare = st.tabs(["Analyze Recipe", "Compare Recipes"])
@@ -209,8 +193,3 @@ def main(embedded: bool = False):
     # Footer
     st.markdown("---")
     st.caption("Smart Recipe Lab - Powered by local Hugging Face embeddings, LightGBM, and OpenRouter")
-
-
-if __name__ == "__main__":
-    st.set_page_config(page_title="Smart Recipe Lab", page_icon="🧪", layout="wide")
-    main()

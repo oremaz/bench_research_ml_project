@@ -10,6 +10,7 @@ import sys
 import time
 from importlib.metadata import version
 from pathlib import Path
+from contextlib import contextmanager
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -23,6 +24,21 @@ RELEASE_COMMITS = {
     "dpf_reproduction": ("DPF-Nutrition", "ed37fbefd5582e7963c08c2815761ab4566cd838"),
 }
 QUANTIZED_MODULES = "model.layers.*"
+
+
+def prepare_release(method):
+    name, commit = RELEASE_COMMITS[method]
+    release = FOOD_VISION_DIR / "data/paper_releases" / name
+    repositories = {"foodlmm": "https://github.com/YuehaoYin/FoodLMM.git",
+                    "dpf_reproduction": "https://github.com/T0MYYY/Nutrition5k.git"}
+    if not release.exists():
+        release.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "clone", "--no-checkout", repositories[method], str(release)], check=True)
+        subprocess.run(["git", "-C", str(release), "checkout", "--detach", commit], check=True)
+    actual = subprocess.check_output(["git", "-C", str(release), "rev-parse", "HEAD"], text=True).strip()
+    if actual != commit or subprocess.check_output(["git", "-C", str(release), "status", "--porcelain"], text=True).strip():
+        raise ValueError("Paper release must match the clean pinned commit")
+    return release
 
 
 def select_device(device):
@@ -71,6 +87,46 @@ def digest(path):
     return checksum.hexdigest()
 
 
+@contextmanager
+def quanto_unpack_context(device):
+    if device.type != "mps":
+        yield
+        return
+    import torch
+    from torch.utils._python_dispatch import TorchDispatchMode
+
+    class MPSUnpackMode(TorchDispatchMode):
+        def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+            if func is torch.ops.quanto.unpack.default:
+                packed, bits = args
+                if bits not in (2, 4):
+                    raise ValueError("Quanto unpack supports only 2 or 4 bits")
+                mask = (1 << bits) - 1
+                return torch.cat([(packed // (1 << shift)) & mask
+                                  for shift in range(0, 8, bits)], dim=0).to(torch.uint8)
+            return func(*args, **(kwargs or {}))
+
+    # Quanto's native MPS unpack recompiles Metal shaders and synchronizes per call.
+    with MPSUnpackMode():
+        yield
+
+
+def nutrition_stopping_criteria(token_ids, prompt_length):
+    from transformers import StoppingCriteria, StoppingCriteriaList
+
+    class NutritionTokensComplete(StoppingCriteria):
+        def __init__(self):
+            self.remaining = set(token_ids)
+            self.seen_length = prompt_length
+
+        def __call__(self, input_ids, scores, **kwargs):
+            self.remaining.difference_update(input_ids[0, self.seen_length:].tolist())
+            self.seen_length = input_ids.shape[-1]
+            return not self.remaining
+
+    return StoppingCriteriaList([NutritionTokensComplete()])
+
+
 class FoodLMM:
     def __init__(self, release, device, quantization="none", quantized_checkpoint=None):
         import torch
@@ -102,6 +158,8 @@ class FoodLMM:
                 indices[f"{name}_token_idx" + (f"_{number}" if number else "")] = encoded[0]
         vision_path = snapshot_download("openai/clip-vit-large-patch14",
             revision="32bd64288804d66eefd0ccbe215aa642df71cc41", local_files_only=True)
+        self.total_token_ids = [indices[f"{name}_token_idx"]
+                                for name in ("mass", "calorie", "fat", "carbohydrate", "protein")]
         config = AutoConfig.from_pretrained(FOODLMM_MODEL, revision=FOODLMM_REVISION)
         config.vision_tower = vision_path
         config.mm_vision_tower = vision_path
@@ -167,11 +225,19 @@ class FoodLMM:
             "<im_start><image><im_end>\nCan you provide the total caloric, fat, carbohydrate, and protein content of this dish directly?")
         conversation.append_message(conversation.roles[1], None)
         ids = self.tokenize_image(conversation.get_prompt(), self.tokenizer, return_tensors="pt").unsqueeze(0).to(self.device)
-        with torch.inference_mode():
+        # Quanto tensor subclasses require version counters during inference.
+        with torch.no_grad(), quanto_unpack_context(self.device):
+            synchronize(self.device)
+            started = time.perf_counter()
+            print(f"FoodLMM: generating nutrition tokens on {self.device}", file=sys.stderr, flush=True)
             outputs = self.model.generate(images=clip, input_ids=ids, max_new_tokens=256,
                 attention_mask=torch.ones_like(ids), num_beams=1, do_sample=False,
-                use_cache=True, output_hidden_states=False, return_dict_in_generate=True)
+                use_cache=True, output_hidden_states=False, return_dict_in_generate=True,
+                stopping_criteria=nutrition_stopping_criteria(self.total_token_ids, ids.shape[-1]))
             output_ids = outputs.sequences
+            synchronize(self.device)
+            print(f"FoodLMM: generated {output_ids.shape[-1] - ids.shape[-1]} tokens in {time.perf_counter() - started:.2f}s; evaluating nutrition heads", file=sys.stderr, flush=True)
+            started = time.perf_counter()
             # Preserve the author's full-prefix states for the trained nutrition heads.
             final = self.model(images=clip, input_ids=output_ids[:, :-1], past_key_values=None,
                 use_cache=False, output_hidden_states=False, return_dict=True).hidden_states
@@ -185,6 +251,8 @@ class FoodLMM:
                 if values.numel() != 1:
                     raise ValueError(f"Expected one whole-dish {target} token, received {values.numel()}")
                 prediction[target] = float(values.item())
+            synchronize(self.device)
+            print(f"FoodLMM: nutrition heads completed in {time.perf_counter() - started:.2f}s", file=sys.stderr, flush=True)
         return prediction, self.tokenizer.decode(output_ids[0][output_ids[0] != -200], skip_special_tokens=False)
 
 
@@ -198,8 +266,14 @@ class DPFReproduction:
 
         checkpoint = hf_hub_download("T0MYYY/dpf-nutrition", "dpf_nutrition_food2k.pt",
             revision="05850dd44c18c12e2af4bfd7ff17e570164ea098")
-        self.model = DPFNutritionNet(["calories", "mass", "fat", "carb", "protein"], pretrained=False)
+        class CheckpointDPFNutritionNet(DPFNutritionNet):
+            def _load_food2k_or_log_fallback(self, path):
+                # The complete released checkpoint replaces initialization weights.
+                return
+
+        self.model = CheckpointDPFNutritionNet(["calories", "mass", "fat", "carb", "protein"], pretrained=False)
         self.model.load_state_dict(torch.load(checkpoint, map_location="cpu", weights_only=True), strict=True)
+        print("DPF: complete released checkpoint loaded, including RGB and depth backbones", file=sys.stderr, flush=True)
         self.model.to(device).eval()
         self.depth = pipeline("depth-estimation", model="depth-anything/Depth-Anything-V2-Small-hf",
             revision="5426e4f0f36572d16453bbda7a8389317b1bef99", device=device)
@@ -241,11 +315,8 @@ def main():
         parser.error("--export-quantized requires --quantization 4bit")
     device = select_device(args.device)
     method = "foodlmm_4bit" if args.quantization == "4bit" else args.method
-    name, commit = RELEASE_COMMITS[args.method]
-    release = FOOD_VISION_DIR / "data/paper_releases" / name
-    actual = subprocess.check_output(["git", "-C", str(release), "rev-parse", "HEAD"], text=True).strip()
-    if actual != commit or subprocess.check_output(["git", "-C", str(release), "status", "--porcelain"], text=True).strip():
-        raise ValueError("Paper release must match the clean pinned commit")
+    _, commit = RELEASE_COMMITS[args.method]
+    release = prepare_release(args.method)
     sys.path.insert(0, str(release))
     from PIL import Image
     import torch
@@ -266,6 +337,7 @@ def main():
         "packed_weights_sha256": digest(args.quantized_checkpoint / "model.safetensors") if args.quantized_checkpoint else None,
         "nutrition_only": args.method == "foodlmm",
         "generation_use_cache": True if args.method == "foodlmm" else None,
+        "generation_stop": "all five whole-dish nutrition tokens, EOS, or token limit" if args.method == "foodlmm" else None,
         "nutrition_hidden_states": "full-prefix forward pass" if args.method == "foodlmm" else None,
         "training_provenance": "Published external weights; fitted IDs cannot be independently audited",
         "implementation": "Author FoodLMM-Chat release" if args.method == "foodlmm" else

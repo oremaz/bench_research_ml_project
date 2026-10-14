@@ -1,7 +1,6 @@
 """Cache test data and published research models before an offline GPU job."""
 
 import argparse
-import subprocess
 import sys
 from pathlib import Path
 
@@ -35,18 +34,9 @@ def main():
         print(f"Food-R1 cached at {path}", flush=True)
     if args.papers:
         from huggingface_hub import hf_hub_download
-        from nutricoach.food_vision.evaluate_paper_system import RELEASE_COMMITS, FOODLMM_MODEL, FOODLMM_REVISION
-        repositories = {"FoodLMM": "https://github.com/YuehaoYin/FoodLMM.git",
-                        "DPF-Nutrition": "https://github.com/T0MYYY/Nutrition5k.git"}
-        for name, commit in RELEASE_COMMITS.values():
-            destination = FOOD_VISION_DIR / "data/paper_releases" / name
-            if not destination.exists():
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                subprocess.run(["git", "clone", "--no-checkout", repositories[name], str(destination)], check=True)
-                subprocess.run(["git", "-C", str(destination), "checkout", "--detach", commit], check=True)
-            actual = subprocess.check_output(["git", "-C", str(destination), "rev-parse", "HEAD"], text=True).strip()
-            if actual != commit:
-                raise ValueError(f"Unexpected release commit in {destination}")
+        from nutricoach.food_vision.evaluate_paper_system import RELEASE_COMMITS, FOODLMM_MODEL, FOODLMM_REVISION, prepare_release
+        for method in RELEASE_COMMITS:
+            prepare_release(method)
         snapshot_download(FOODLMM_MODEL, revision=FOODLMM_REVISION)
         snapshot_download("openai/clip-vit-large-patch14", revision="32bd64288804d66eefd0ccbe215aa642df71cc41",
                           allow_patterns=["config.json", "preprocessor_config.json", "pytorch_model.bin"])

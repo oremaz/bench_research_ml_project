@@ -135,6 +135,7 @@ def test_upload_analysis_is_not_repeated_by_editing_and_new_photo_clears_draft(o
     photo = SimpleNamespace(name="meal.jpg", getvalue=lambda: b"first photo")
     monkeypatch.setattr(app.st, "file_uploader", lambda *args, **kwargs: photo)
     monkeypatch.setattr(app.st, "image", lambda *args, **kwargs: None)
+    original["method"] = "foodlmm_4bit"
     invoke = MagicMock(return_value=original)
     monkeypatch.setattr(app, "analyze_food_image", SimpleNamespace(invoke=invoke))
     at = AppTest.from_string(
@@ -152,3 +153,33 @@ def test_upload_analysis_is_not_repeated_by_editing_and_new_photo_clears_draft(o
     assert not at.exception
     assert "photo_result" not in at.session_state
     assert invoke.call_count == 1
+
+
+def test_photo_uses_selected_dpf(tmp_path, monkeypatch):
+    from nutricoach import app
+    from nutricoach.food_vision.supervised_analyzers import total_result
+    monkeypatch.setattr(app, "SECRETS_DIR", tmp_path)
+    photo = SimpleNamespace(name="meal.jpg", getvalue=lambda: b"same photo")
+    monkeypatch.setattr(app.st, "file_uploader", lambda *args, **kwargs: photo)
+    monkeypatch.setattr(app.st, "image", lambda *args, **kwargs: None)
+    analyzer = MagicMock()
+    analyzer.analyze.return_value = total_result("dpf_reproduction", {
+        "calories": 600, "mass_g": 200, "fat_g": 1, "carbs_g": 56, "protein_g": 5,
+    }, 0)
+    monkeypatch.setattr("nutricoach.food_vision.dpf_analyzer.get_dpf_analyzer", lambda: analyzer)
+    at = AppTest.from_string(
+        'from nutricoach import app\napp.initialize_session_state()\napp.display_food_analysis()', default_timeout=15
+    )
+    at.session_state["food_vision_method"] = "dpf_reproduction"
+    at.session_state["photo_context"] = (None, "dpf_reproduction", "previous-photo")
+    at.session_state["photo_result"] = {"method": "dpf_reproduction"}
+    at.run()
+    assert not at.exception
+    assert at.selectbox[0].value == "dpf_reproduction"
+    assert "photo_result" not in at.session_state
+    at.button[0].click().run()
+    assert not at.exception
+    assert at.session_state["photo_result"]["method"] == "dpf_reproduction"
+    assert at.session_state["photo_result"]["total_calories"] == 600
+    analyzer.analyze.assert_called_once()
+    assert not list(tmp_path.glob("*.jpg"))

@@ -117,6 +117,8 @@ def test_report_rejects_model_and_manifest_mismatch(tmp_path):
 
 def test_dots_snapshot_metrics_are_reproducible():
     path = Path(__file__).parent.parent / "nutricoach/food_vision/nutrition5k_dots_results.json"
+    if not path.is_file():
+        pytest.skip("Local benchmark snapshot is not available")
     snapshot = json.loads(path.read_text())
     from nutricoach.food_vision.evaluate_nutrition5k import summarize
     computed = summarize(snapshot["predictions"], snapshot["manifest"], list(snapshot["predictions"]), 42)

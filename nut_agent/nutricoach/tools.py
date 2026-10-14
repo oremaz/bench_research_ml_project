@@ -18,7 +18,6 @@ from shared.config import (
     MACRO_RATIOS,
     WATER_ML_PER_KG,
     SECRETS_DIR,
-    OPENROUTER_REASONING_EFFORT,
 )
 from shared.utils import calculate_bmi, validate_nutrition_targets
 from shared.memory import MemoryManager
@@ -379,13 +378,15 @@ def analyze_food_image(
     image_path: str,
     config: RunnableConfig,
     log_meal: bool = False,
+    method: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Analyze a food photo with Single-shot VLM to estimate ingredients, portions, and calories/macros.
+    Analyze a food photo locally with FoodLMM 4-bit or DPF to estimate whole-dish mass, calories and macros.
 
     Args:
         image_path: Path to the food image file
         log_meal: Save the estimated meal to today's log only when the user asks to log it
+        method: foodlmm_4bit (default) or dpf_reproduction
 
     Returns:
         Dictionary with detected food items and nutritional breakdown
@@ -396,18 +397,14 @@ def analyze_food_image(
         return {"error": f"Image not found: {image_path}"}
 
     try:
-        provider = config.get("configurable", {}).get("llm_provider", "openrouter")
-        api_key = config.get("configurable", {}).get(f"{provider}_api_key")
-        from shared.llm_provider import default_model
-        model_id = config.get("configurable", {}).get("vision_model_id") or default_model(provider)
-        reasoning_effort = config.get("configurable", {}).get("reasoning_effort", "none" if provider == "local" else OPENROUTER_REASONING_EFFORT)
-
-        from nutricoach.food_vision.vlm_analyzer import VLMAnalyzerSingleShot
-        options = {"provider": provider,
-                   "device": config.get("configurable", {}).get("local_device"),
-                   "quantization": config.get("configurable", {}).get("local_quantization", "none")}
-        analyzer = VLMAnalyzerSingleShot(api_key=api_key, model=model_id, reasoning_effort=reasoning_effort, **options)
-
+        if method not in (None, "foodlmm_4bit", "dpf_reproduction"):
+            raise ValueError(f"Unknown food photo method: {method}")
+        if method == "dpf_reproduction":
+            from nutricoach.food_vision.dpf_analyzer import get_dpf_analyzer
+            analyzer = get_dpf_analyzer()
+        else:
+            from nutricoach.food_vision.foodlmm_analyzer import get_foodlmm_analyzer
+            analyzer = get_foodlmm_analyzer()
         result = analyzer.analyze(image_path)
 
         if log_meal and result.food_items and not result.error:
@@ -416,7 +413,7 @@ def analyze_food_image(
         return result.to_dict()
 
     except ImportError as e:
-        return {"error": f"Missing dependency for Single-shot VLM: {str(e)}"}
+        return {"error": f"Missing food analysis dependency: {str(e)}"}
     except Exception as e:
         return {"error": f"Analysis failed: {str(e)}"}
 

@@ -18,7 +18,7 @@ REASONING_EFFORTS = {"openrouter": ("none", "low", "medium", "high", "xhigh", "m
 def default_model(provider):
     if provider not in PROVIDERS:
         raise ValueError(f"Unknown LLM provider: {provider}")
-    return os.getenv(f"{provider.upper()}_MODEL_ID", DEFAULT_MODELS[provider])
+    return os.getenv(f"{provider.upper()}_MODEL_ID", "").strip() or DEFAULT_MODELS[provider]
 
 
 def request_settings(provider, reasoning_effort):

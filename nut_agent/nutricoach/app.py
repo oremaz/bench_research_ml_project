@@ -36,7 +36,7 @@ import pandas as pd
 
 from langchain_core.messages import HumanMessage, AIMessage
 
-from shared.config import OPENROUTER_MODEL_ID, OPENROUTER_REASONING_EFFORT, SECRETS_DIR, STREAMLIT_CONFIG
+from shared.config import OPENROUTER_REASONING_EFFORT, SECRETS_DIR, STREAMLIT_CONFIG
 from shared.auth import (
     authenticate_user,
     register_user,
@@ -75,7 +75,6 @@ def initialize_session_state():
         "agent_graph": None,
         "thread_id": None,
         "chat_history": [],
-        "vision_model_id": OPENROUTER_MODEL_ID,
         "llm_provider": "openrouter",
         "chat_model_id": default_model("openrouter"),
         "api_key": os.getenv("OPENROUTER_API_KEY", ""),
@@ -105,7 +104,6 @@ def _thread_config() -> dict:
         "llm_provider": st.session_state.get("llm_provider", "openrouter"),
         "local_device": st.session_state.get("local_device"),
         "local_quantization": st.session_state.get("local_quantization", "none"),
-        "vision_model_id": st.session_state.get("vision_model_id", OPENROUTER_MODEL_ID),
         "reasoning_effort": st.session_state.get("reasoning_effort", OPENROUTER_REASONING_EFFORT),
     }}
 
@@ -175,7 +173,6 @@ def _ensure_memory_migrated(username):
 def _change_llm_provider():
     provider = st.session_state["llm_provider"]
     st.session_state["chat_model_id"] = default_model(provider)
-    st.session_state["vision_model_id"] = default_model(provider)
     st.session_state["reasoning_effort"] = "none" if provider == "local" else "high"
     st.session_state["agent_graph"] = None
 
@@ -184,22 +181,32 @@ def display_llm_settings():
     provider = st.selectbox("Model provider", PROVIDERS, key="llm_provider",
                             format_func=lambda value: {"openrouter": "OpenRouter", "groq": "Groq", "local": "Local (Qwen)"}[value],
                             on_change=_change_llm_provider)
+    model_id = st.session_state.get("chat_model_id", "")
+    if (not model_id or not model_id.strip()
+            or (provider == "openrouter" and model_id == "dots-studio/dots-3-note-preview:free")):
+        st.session_state["chat_model_id"] = default_model(provider)
     if provider != "local":
         label, key = ("OpenRouter", "api_key") if provider == "openrouter" else ("Groq", "groq_api_key")
-        st.text_input(f"{label} API Key", type="password", key=key)
+        if provider == "openrouter" and os.getenv("OPENROUTER_API_KEY"):
+            st.session_state[key] = os.environ["OPENROUTER_API_KEY"]
+            st.text_input(f"{label} API Key", value="***", disabled=True)
+            st.caption("Key configured in the environment.")
+        else:
+            st.text_input(f"{label} API Key", type="password", key=key)
     else:
         st.selectbox("Local precision", ("none", "4bit"), key="local_quantization",
                      format_func=lambda value: "BF16" if value == "none" else "4-bit (CUDA)")
         st.caption("Local inference needs downloaded weights and sufficient memory. 4-bit mode reduces GPU memory use.")
     st.text_input("Chat model ID", key="chat_model_id")
     st.selectbox("Reasoning effort", REASONING_EFFORTS[provider], key="reasoning_effort",
-                 help="Applies to NutriCoach chat and Food Vision.")
+                 help="Applies to NutriCoach chat.")
 
 
 def init_agent():
     provider = st.session_state.get("llm_provider", "openrouter")
     reasoning_effort = st.session_state.get("reasoning_effort", OPENROUTER_REASONING_EFFORT)
-    api_key = st.session_state.get("api_key" if provider == "openrouter" else "groq_api_key", "")
+    api_key = ((os.getenv("OPENROUTER_API_KEY") or st.session_state.get("api_key", "")) if provider == "openrouter"
+               else st.session_state.get("groq_api_key", ""))
     model_id = st.session_state.get("chat_model_id") or default_model(provider)
     signature = (provider, api_key if provider != "local" else None, model_id, reasoning_effort,
                  st.session_state.get("local_device"), st.session_state.get("local_quantization", "none"))
@@ -316,12 +323,19 @@ def _save_upload(uploaded) -> Path:
 def display_food_analysis():
     """Tab for analyzing food photos."""
     st.subheader("Analyze Food Photo")
-    st.markdown("Upload a photo of your meal to estimate ingredients, portions, and calories.")
-    st.caption("Food photos are analyzed with Single-shot VLM.")
-    st.text_input("Vision model ID", key="vision_model_id", help="Choose a model that accepts images from the selected provider.")
+    st.markdown("Upload a photo of your meal to estimate its total mass, calories, and macros.")
+    method = st.selectbox("Analysis method", ["foodlmm_4bit", "dpf_reproduction"],
+                          format_func=lambda value: {"foodlmm_4bit": "FoodLMM (4-bit)",
+                                                     "dpf_reproduction": "DPF (reproduction)"}[value],
+                          key="food_vision_method")
+    st.caption("Runs locally, with no API key. Model files download on first use.")
+    if method == "foodlmm_4bit":
+        st.caption("FoodLMM (4-bit) requires its separate environment. A prepared 4-bit checkpoint reduces loading memory.")
+    else:
+        st.caption("DPF estimates whole-dish nutrition using RGB and predicted depth.")
 
     uploaded = st.file_uploader("Upload a food image", type=["jpg", "jpeg", "png", "webp"])
-    context = (st.session_state.get("username"), hashlib.sha256(uploaded.getvalue()).hexdigest()) if uploaded else None
+    context = (st.session_state.get("username"), method, hashlib.sha256(uploaded.getvalue()).hexdigest()) if uploaded else None
     if st.session_state.get("photo_context") != context:
         st.session_state["photo_context"] = context
         st.session_state.pop("photo_result", None)
@@ -334,9 +348,11 @@ def display_food_analysis():
         tmp_path = _save_upload(uploaded)
         try:
             with st.spinner("Analyzing your meal..."):
-                result = analyze_food_image.invoke({"image_path": str(tmp_path)}, config=_thread_config())
+                result = analyze_food_image.invoke({"image_path": str(tmp_path), "method": method}, config=_thread_config())
             if result.get("error"):
                 st.error(result["error"])
+            elif result.get("method") != method:
+                st.error("The analysis returned a different method than selected. Please restart the app and analyze again.")
             else:
                 st.session_state["photo_result"] = result
                 st.session_state["photo_review_id"] = uuid.uuid4().hex[:8]
@@ -352,6 +368,8 @@ def display_photo_review():
     review_id = st.session_state["photo_review_id"]
     logged = st.session_state.get("photo_logged", False)
     st.markdown("**Review your meal**")
+    st.caption("Analysis method: " + {"foodlmm_4bit": "FoodLMM (4-bit)", "dpf_reproduction": "DPF (reproduction)"}
+               .get(original["method"], original["method"]))
     meal_name = st.text_input("Meal name", value="Photo meal", key=f"photo_name_{review_id}", disabled=logged)
     st.caption("Edit grams, add rows, or select rows to delete ingredients. When changing a food, choose its nutrition source. "
                "Manual nutrient columns are per 100g; selecting a database food overrides those columns.")
@@ -712,7 +730,7 @@ def main_app():
 
     with tab_recipe:
         from recipe_lab.app import main as display_recipe_lab
-        display_recipe_lab(embedded=True)
+        display_recipe_lab()
 
     with tab_dashboard:
         display_nutrition_dashboard()

@@ -91,7 +91,7 @@ MACRO_RATIOS = {
 WATER_ML_PER_KG = 35  # ml per kg body weight
 
 # LLM configurations
-OPENROUTER_MODEL_ID = "dots-studio/dots-3-note-preview:free"
+OPENROUTER_MODEL_ID = "openrouter/free"
 OPENROUTER_REASONING_EFFORT = "high"
 OPENROUTER_REASONING_EFFORTS = ("low", "medium", "high", "xhigh", "max")
 OPENROUTER_MAX_OUTPUT_TOKENS = 8192

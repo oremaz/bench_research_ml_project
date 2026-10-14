@@ -73,8 +73,8 @@ def markdown_report(report):
     count = len(report["manifest"]["dish_ids"])
     lines = ["# Nutrition5k: current RGB-only benchmark", "",
              f"All methods use the same frozen {count}-dish official-test RGB subset. Pending methods have no measured score.", "",
-             f"| Method | Successes / {count} | Calories MAE (kcal) | Mass MAE (g) | Fat MAE (g) | Carbs MAE (g) | Protein MAE (g) |",
-             "|---|---:|---:|---:|---:|---:|---:|"]
+             "| Method | Calories MAE (kcal) | Mass MAE (g) | Fat MAE (g) | Carbs MAE (g) | Protein MAE (g) |",
+             "|---|---:|---:|---:|---:|---:|"]
     for method in report["summary"]["methods"]:
         statistics = report["summary"]["methods"][method]
         errors = statistics["errors"]
@@ -82,7 +82,7 @@ def markdown_report(report):
                ("calories", "mass_g", "fat_g", "carbs_g", "protein_g")]
         label = {"foodlmm": "FoodLMM (16-bit)", "foodlmm_cached": "FoodLMM (16-bit, cached)",
                  "foodlmm_4bit": "FoodLMM (4-bit decoder)"}.get(method, method)
-        lines.append(f"| {label} | {statistics['successful']} / {count} | " + " | ".join(row) + " |")
+        lines.append(f"| {label} | " + " | ".join(row) + " |")
     lines.extend(["", "MAE is computed on successful predictions; consult JSON for failures, missing dishes, signed errors,",
                   "normalized MAE, RMSE, R2, dish-bootstrap confidence intervals and paired comparisons for all five targets.",
                   "Oracle-mass errors are post-hoc diagnostics using reference masses, never deployable RGB-only scores.", "",
@@ -120,7 +120,7 @@ def markdown_report(report):
     lines.extend(["", "Partial runs must be compared on common successful dishes. An incomplete one-shot baseline",
                   f"cannot establish a winner for the full {count}-dish evaluation.", "",
                   "FoodLMM uses the author's Chat checkpoint; DPF uses a third-party reproduction with",
-                  "Depth Anything V2 and modified fusion. See [release coverage and limitations](README.md#additional-paper-release-coverage)."])
+                  "Depth Anything V2 and modified fusion. See [methods and limitations](README.md#methods-in-practice)."])
     pairs = report["summary"]["nutrient_comparisons"]["paired"]
     rows = []
     for method in report["summary"]["methods"]:
@@ -159,7 +159,7 @@ def main():
     parser.add_argument("--manifest", type=Path, default=FOOD_VISION_DIR / "data/nutrition5k_500/manifest.json")
     parser.add_argument("--run-dir", type=Path, nargs="+", required=True)
     parser.add_argument("--model", default=OPENROUTER_MODEL_ID)
-    parser.add_argument("--output", type=Path, default=FOOD_VISION_DIR / "nutrition5k_500_results.json")
+    parser.add_argument("--output", type=Path, default=FOOD_VISION_DIR / "nutrition5k_500_qwen_results.json")
     args = parser.parse_args()
     report = build_report(args.manifest, args.run_dir, args.model)
     write_json(args.output, report)
